@@ -4,13 +4,17 @@ Projects API — CRUD endpoints and checkpoint resolver for incept_projects.
 All routes require a valid Supabase JWT in the ``Authorization: Bearer <token>`` header.
 Row-level security in Supabase further enforces per-user data isolation.
 """
+import logging
 from fastapi import APIRouter, HTTPException, Header
+from fastapi.responses import HTMLResponse
 from supabase import create_client, Client
 from config import settings
 from models.schemas import ProjectCreate, ProjectUpdate, CheckpointRequest, CheckpointAction
 import checkpoint_registry as cr
 import uuid
 from datetime import datetime, timezone
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -155,3 +159,144 @@ async def handle_checkpoint(
         }).eq("id", project_id).eq("user_id", user_id).execute()
 
     return {"action": body.action, "checkpoint": body.checkpoint_name, "project_id": project_id}
+
+
+@router.post("/{project_id}/prototype", summary="Generate an HTML prototype for the project")
+async def generate_project_prototype(project_id: str, authorization: str = Header(...)):
+    """
+    Generate a single-file interactive HTML prototype using Claude and persist it on the project.
+    Returns the HTML directly so the caller can open it in a new tab.
+    """
+    from agents.prototype_agent import generate_prototype
+
+    user_id = _get_user(authorization)
+
+    result = (
+        _supabase.table("incept_projects")
+        .select("plan, requirements, status")
+        .eq("id", project_id)
+        .eq("user_id", user_id)
+        .single()
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    project = result.data
+    plan = project.get("plan") or {}
+    requirements = project.get("requirements") or {}
+    architecture = plan.get("architecture") or {}
+    tech_stack = plan.get("tech_stack") or {}
+
+    if not architecture and not tech_stack:
+        raise HTTPException(status_code=400, detail="Plan not yet generated for this project")
+
+    try:
+        html = await generate_prototype(requirements, architecture, tech_stack)
+    except Exception as exc:
+        logger.error("Prototype generation failed for project %s: %s", project_id, exc)
+        raise HTTPException(status_code=500, detail=f"Prototype generation failed: {exc}")
+
+    # Persist prototype in the plan JSON
+    plan["prototype_html"] = html
+    _supabase.table("incept_projects").update({
+        "plan": plan,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }).eq("id", project_id).eq("user_id", user_id).execute()
+
+    return HTMLResponse(content=html, media_type="text/html")
+
+
+@router.get("/{project_id}/prototype", summary="Return the cached HTML prototype")
+async def get_project_prototype(project_id: str, authorization: str = Header(...)):
+    """Return the previously generated prototype HTML, or 404 if not yet generated."""
+    user_id = _get_user(authorization)
+
+    result = (
+        _supabase.table("incept_projects")
+        .select("plan")
+        .eq("id", project_id)
+        .eq("user_id", user_id)
+        .single()
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    plan = result.data.get("plan") or {}
+    html = plan.get("prototype_html")
+    if not html:
+        raise HTTPException(status_code=404, detail="Prototype not yet generated")
+
+    return HTMLResponse(content=html, media_type="text/html")
+
+
+@router.post("/{project_id}/report", summary="Generate a comprehensive HTML planning report")
+async def generate_project_report(project_id: str, authorization: str = Header(...)):
+    """
+    Generate a full professional planning document using Claude and persist it.
+    Returns the HTML directly so the caller can open it in a new tab and print to PDF.
+    """
+    from agents.report_agent import generate_report
+
+    user_id = _get_user(authorization)
+
+    result = (
+        _supabase.table("incept_projects")
+        .select("plan, requirements, status")
+        .eq("id", project_id)
+        .eq("user_id", user_id)
+        .single()
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    project = result.data
+    plan = project.get("plan") or {}
+    requirements = project.get("requirements") or {}
+    architecture = plan.get("architecture") or {}
+    tech_stack = plan.get("tech_stack") or {}
+    estimation = plan.get("estimation") or {}
+
+    if not architecture and not tech_stack:
+        raise HTTPException(status_code=400, detail="Plan not yet complete for this project")
+
+    try:
+        html = await generate_report(requirements, architecture, tech_stack, estimation)
+    except Exception as exc:
+        logger.error("Report generation failed for project %s: %s", project_id, exc)
+        raise HTTPException(status_code=500, detail=f"Report generation failed: {exc}")
+
+    # Cache report in the plan JSON
+    plan["report_html"] = html
+    _supabase.table("incept_projects").update({
+        "plan": plan,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }).eq("id", project_id).eq("user_id", user_id).execute()
+
+    return HTMLResponse(content=html, media_type="text/html")
+
+
+@router.get("/{project_id}/report", summary="Return the cached planning report")
+async def get_project_report(project_id: str, authorization: str = Header(...)):
+    """Return the previously generated planning report HTML, or 404 if not yet generated."""
+    user_id = _get_user(authorization)
+
+    result = (
+        _supabase.table("incept_projects")
+        .select("plan")
+        .eq("id", project_id)
+        .eq("user_id", user_id)
+        .single()
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    plan = result.data.get("plan") or {}
+    html = plan.get("report_html")
+    if not html:
+        raise HTTPException(status_code=404, detail="Report not yet generated")
+
+    return HTMLResponse(content=html, media_type="text/html")

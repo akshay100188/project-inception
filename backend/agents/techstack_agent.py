@@ -6,10 +6,13 @@ techstack corpus, then prompts Claude to produce layer-by-layer recommendations.
 """
 import asyncio
 import json
-import re
+import logging
 import anthropic
 from config import settings
 from rag.corpus import search, format_context
+from agents.agent_utils import parse_json_response
+
+logger = logging.getLogger(__name__)
 
 _client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
 
@@ -87,15 +90,7 @@ async def run_techstack_agent(state: dict) -> dict:
             full_response += text
             await queue.put({"event": "token", "agent": "techstack", "data": text})
 
-    cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", full_response.strip())
-    try:
-        tech_stack = json.loads(cleaned)
-    except json.JSONDecodeError:
-        match = re.search(r"\{.*\}", cleaned, re.DOTALL)
-        try:
-            tech_stack = json.loads(match.group()) if match else {"raw": full_response}
-        except (json.JSONDecodeError, AttributeError):
-            tech_stack = {"raw": full_response}
+    tech_stack = parse_json_response(full_response, "techstack")
 
     await queue.put({"event": "agent_done", "agent": "techstack", "data": "Tech stack selected."})
 

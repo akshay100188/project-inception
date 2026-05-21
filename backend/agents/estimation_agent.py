@@ -6,10 +6,13 @@ to apply them to the specific requirements, architecture, and tech stack.
 """
 import asyncio
 import json
-import re
+import logging
 import anthropic
 from config import settings
 from rag.corpus import search, format_context
+from agents.agent_utils import parse_json_response
+
+logger = logging.getLogger(__name__)
 
 _client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
 
@@ -96,15 +99,7 @@ async def run_estimation_agent(state: dict) -> dict:
             full_response += text
             await queue.put({"event": "token", "agent": "estimation", "data": text})
 
-    cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", full_response.strip())
-    try:
-        estimation = json.loads(cleaned)
-    except json.JSONDecodeError:
-        match = re.search(r"\{.*\}", cleaned, re.DOTALL)
-        try:
-            estimation = json.loads(match.group()) if match else {"raw": full_response}
-        except (json.JSONDecodeError, AttributeError):
-            estimation = {"raw": full_response}
+    estimation = parse_json_response(full_response, "estimation")
 
     await queue.put({"event": "agent_done", "agent": "estimation", "data": "Estimation complete."})
 

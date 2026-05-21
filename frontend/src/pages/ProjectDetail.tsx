@@ -24,6 +24,8 @@ export default function ProjectDetail() {
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [generatingPrototype, setGeneratingPrototype] = useState(false);
+  const [generatingReport, setGeneratingReport] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -79,6 +81,32 @@ export default function ProjectDetail() {
     navigate("/");
   }
 
+  async function openGeneratedHtml(endpoint: string, errorLabel: string, setLoading: (v: boolean) => void) {
+    if (!id) return;
+    setLoading(true);
+    try {
+      const authHeader = await getAuthHeader();
+      const res = await fetch(`${API_BASE}/api/projects/${id}/${endpoint}`, {
+        method: "POST",
+        headers: { Authorization: authHeader },
+      });
+      if (!res.ok) throw new Error(`${errorLabel} failed (${res.status})`);
+      const html = await res.text();
+      const blob = new Blob([html], { type: "text/html" });
+      window.open(URL.createObjectURL(blob), "_blank");
+    } catch (err: any) {
+      alert(`${errorLabel}: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const handleGenerateReport = () =>
+    openGeneratedHtml("report", "Report generation", setGeneratingReport);
+
+  const handleGeneratePrototype = () =>
+    openGeneratedHtml("prototype", "Prototype generation", setGeneratingPrototype);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-950 flex items-center justify-center">
@@ -126,8 +154,61 @@ export default function ProjectDetail() {
               onSave={isReviewing ? handleApprove : undefined}
               reviewMode={isReviewing}
             />
-            {isReviewing && (
-              <div className="flex justify-end">
+            {/* Action bar */}
+            <div className="rounded-xl border border-gray-800 bg-gray-900/60 px-4 py-3 flex flex-wrap items-center gap-3">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-gray-500">Generate deliverables from this plan</p>
+              </div>
+
+              {/* Full planning report */}
+              <button
+                onClick={handleGenerateReport}
+                disabled={generatingReport || generatingPrototype}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                {generatingReport ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                    </svg>
+                    Generating report…
+                  </>
+                ) : (
+                  <>
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Download Full Report (PDF)
+                  </>
+                )}
+              </button>
+
+              {/* App prototype */}
+              <button
+                onClick={handleGeneratePrototype}
+                disabled={generatingPrototype || generatingReport}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-purple-300 border border-purple-800 bg-purple-950/40 hover:bg-purple-900/40 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                {generatingPrototype ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                    </svg>
+                    Generating…
+                  </>
+                ) : (
+                  <>
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                    App Prototype
+                  </>
+                )}
+              </button>
+
+              {isReviewing && (
                 <button
                   onClick={handleReject}
                   disabled={saving}
@@ -135,8 +216,8 @@ export default function ProjectDetail() {
                 >
                   Reject & Discard
                 </button>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         ) : (
           <div className="rounded-xl border border-gray-800 bg-gray-900 p-10 text-center space-y-2">

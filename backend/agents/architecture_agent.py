@@ -6,10 +6,13 @@ ensuring recommendations are reference-backed rather than purely hallucinated.
 """
 import asyncio
 import json
-import re
+import logging
 import anthropic
 from config import settings
 from rag.corpus import search, format_context
+from agents.agent_utils import parse_json_response
+
+logger = logging.getLogger(__name__)
 
 _client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
 
@@ -82,15 +85,7 @@ async def run_architecture_agent(state: dict) -> dict:
             full_response += text
             await queue.put({"event": "token", "agent": "architecture", "data": text})
 
-    cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", full_response.strip())
-    try:
-        architecture = json.loads(cleaned)
-    except json.JSONDecodeError:
-        match = re.search(r"\{.*\}", cleaned, re.DOTALL)
-        try:
-            architecture = json.loads(match.group()) if match else {"raw": full_response}
-        except (json.JSONDecodeError, AttributeError):
-            architecture = {"raw": full_response}
+    architecture = parse_json_response(full_response, "architecture")
 
     await queue.put({"event": "agent_done", "agent": "architecture", "data": "Architecture designed."})
 

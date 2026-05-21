@@ -8,9 +8,12 @@ checkpoint via ``POST /api/projects/{id}/checkpoint`` to resume.
 """
 import asyncio
 import json
+import logging
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Header
 from fastapi.responses import StreamingResponse
+
+logger = logging.getLogger(__name__)
 from graph.planning_graph import build_planning_graph
 from graph.state import PlanningStage
 
