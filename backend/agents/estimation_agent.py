@@ -100,7 +100,10 @@ async def run_estimation_agent(state: dict) -> dict:
         estimation = json.loads(full_response)
     except json.JSONDecodeError:
         match = re.search(r"\{.*\}", full_response, re.DOTALL)
-        estimation = json.loads(match.group()) if match else {"raw": full_response}
+        try:
+            estimation = json.loads(match.group()) if match else {"raw": full_response}
+        except (json.JSONDecodeError, AttributeError):
+            estimation = {"raw": full_response}
 
     await queue.put({"event": "agent_done", "agent": "estimation", "data": "Estimation complete."})
 

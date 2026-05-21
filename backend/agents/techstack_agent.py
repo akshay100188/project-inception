@@ -91,7 +91,10 @@ async def run_techstack_agent(state: dict) -> dict:
         tech_stack = json.loads(full_response)
     except json.JSONDecodeError:
         match = re.search(r"\{.*\}", full_response, re.DOTALL)
-        tech_stack = json.loads(match.group()) if match else {"raw": full_response}
+        try:
+            tech_stack = json.loads(match.group()) if match else {"raw": full_response}
+        except (json.JSONDecodeError, AttributeError):
+            tech_stack = {"raw": full_response}
 
     await queue.put({"event": "agent_done", "agent": "techstack", "data": "Tech stack selected."})
 

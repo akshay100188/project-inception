@@ -21,12 +21,12 @@ export default function NewProject() {
   const { agents, checkpoint, planData, isStreaming, isDone, error, startStream, clearCheckpoint } =
     useAgentStream();
 
-  // Navigate to project detail once stream completes (checkpoint_2 approved + saved)
+  // Navigate only on clean completion — stay on page if there was an error
   useEffect(() => {
-    if (isDone && projectId) {
+    if (isDone && projectId && !error) {
       navigate(`/projects/${projectId}`);
     }
-  }, [isDone, projectId, navigate]);
+  }, [isDone, projectId, navigate, error]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
