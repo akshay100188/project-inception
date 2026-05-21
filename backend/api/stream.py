@@ -30,7 +30,10 @@ async def _event_generator(state: dict):
         try:
             await _compiled_graph.ainvoke(state)
         except Exception as e:
-            await queue.put({"event": "error", "agent": None, "data": str(e)})
+            import traceback
+            logger.error("Planning graph failed for project %s: %s\n%s",
+                         state.get("project_id"), e, traceback.format_exc())
+            await queue.put({"event": "error", "agent": None, "data": f"Pipeline error: {e}"})
         finally:
             await queue.put(None)   # sentinel — signals stream end
 

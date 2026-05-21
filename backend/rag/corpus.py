@@ -30,9 +30,16 @@ async def embed(text: str) -> list[float]:
     return resp.data[0].embedding
 
 
+import logging as _logging
+_log = _logging.getLogger(__name__)
+
+
 async def search(query: str, category: str, top_k: int = 4) -> list[dict]:
     """
     Perform a cosine-similarity semantic search over the RAG corpus.
+
+    Returns an empty list (and logs a warning) if the RPC call fails, so agents
+    can continue without RAG context rather than crashing the whole pipeline.
 
     Args:
         query: Natural-language query string.
@@ -42,12 +49,16 @@ async def search(query: str, category: str, top_k: int = 4) -> list[dict]:
     Returns:
         List of dicts with keys ``id``, ``title``, ``content``, ``similarity``.
     """
-    vector = await embed(query)
-    result = _supabase.rpc(
-        "match_corpus",
-        {"query_embedding": vector, "match_category": category, "match_count": top_k},
-    ).execute()
-    return result.data or []
+    try:
+        vector = await embed(query)
+        result = _supabase.rpc(
+            "match_corpus",
+            {"query_embedding": vector, "match_category": category, "match_count": top_k},
+        ).execute()
+        return result.data or []
+    except Exception as exc:
+        _log.warning("RAG search failed for category=%s: %s — continuing without context", category, exc)
+        return []
 
 
 def format_context(docs: list[dict]) -> str:
