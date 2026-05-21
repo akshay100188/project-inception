@@ -1,0 +1,30 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  box-sizing: border-box;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  nav {
+    display: none !important;
+  }
+  body {
+    background-color: white !important;
+    color: black !important;
+  }
+  .rounded-2xl, .rounded-xl, .rounded-lg {
+    border-color: #ccc !important;
+    background-color: white !important;
+    color: black !important;
+  }
+  * {
+    color: black !important;
+    background-color: transparent !important;
+    border-color: #ccc !important;
+  }
+}

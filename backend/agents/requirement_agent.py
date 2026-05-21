@@ -1,0 +1,69 @@
+import asyncio
+import json
+import anthropic
+from config import settings
+
+_client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+
+# Cached system prompt — stays in cache after first call (~70% cost reduction)
+_SYSTEM_PROMPT = """You are a senior software requirements analyst. Your job is to extract clear, structured requirements from a rough project idea described by a user.
+
+Output ONLY valid JSON in this exact shape:
+{
+  "project_name": "string",
+  "problem_statement": "string (1-2 sentences)",
+  "target_users": ["string"],
+  "core_features": [
+    {"feature": "string", "priority": "must-have|nice-to-have"}
+  ],
+  "integrations": ["string"],
+  "scale": "MVP|small|medium|large",
+  "domain": "string (e.g. fintech, edtech, saas, healthcare)"
+}
+
+Rules:
+- Be concise and specific, no padding
+- Infer reasonable defaults from context
+- Do not ask questions — extract what you can, leave blanks as null
+- Output raw JSON only, no markdown fences"""
+
+
+async def run_requirement_agent(state: dict) -> dict:
+    queue: asyncio.Queue = state["stream_queue"]
+
+    await queue.put({"event": "agent_start", "agent": "requirement", "data": "Analyzing your project idea..."})
+
+    full_response = ""
+
+    async with _client.messages.stream(
+        model="claude-sonnet-4-6",
+        max_tokens=1024,
+        system=[
+            {
+                "type": "text",
+                "text": _SYSTEM_PROMPT,
+                "cache_control": {"type": "ephemeral"},  # prompt caching
+            }
+        ],
+        messages=[
+            {
+                "role": "user",
+                "content": f"Extract requirements from this project idea:\n\n{state['raw_input']}",
+            }
+        ],
+    ) as stream:
+        async for text in stream.text_stream:
+            full_response += text
+            await queue.put({"event": "token", "agent": "requirement", "data": text})
+
+    try:
+        requirements = json.loads(full_response)
+    except json.JSONDecodeError:
+        # Attempt to extract JSON block if Claude added any surrounding text
+        import re
+        match = re.search(r"\{.*\}", full_response, re.DOTALL)
+        requirements = json.loads(match.group()) if match else {"raw": full_response}
+
+    await queue.put({"event": "agent_done", "agent": "requirement", "data": "Requirements extracted."})
+
+    return {"requirements": requirements, "stage": "clarification"}
