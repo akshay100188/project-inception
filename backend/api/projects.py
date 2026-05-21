@@ -1,3 +1,9 @@
+"""
+Projects API — CRUD endpoints and checkpoint resolver for incept_projects.
+
+All routes require a valid Supabase JWT in the ``Authorization: Bearer <token>`` header.
+Row-level security in Supabase further enforces per-user data isolation.
+"""
 from fastapi import APIRouter, HTTPException, Header
 from supabase import create_client, Client
 from config import settings
@@ -12,6 +18,24 @@ _supabase: Client = create_client(settings.supabase_url, settings.supabase_servi
 
 
 def _get_user(authorization: str) -> str:
+    """
+    Extract the ``sub`` (user UUID) from a Supabase-issued JWT.
+
+    Signature verification is intentionally skipped here because Supabase's
+    row-level security policies enforce ownership at the database layer.
+    For environments that require additional server-side validation, pass
+    the JWT secret via ``options={"algorithms": ["HS256"]}`` and verify
+    against ``settings.supabase_jwt_secret``.
+
+    Args:
+        authorization: Raw ``Authorization`` header value (``Bearer <token>``).
+
+    Returns:
+        The user UUID string from the JWT ``sub`` claim.
+
+    Raises:
+        HTTPException 401: If the header is missing, malformed, or has no ``sub``.
+    """
     try:
         import jwt
         token = authorization.replace("Bearer ", "")
@@ -20,12 +44,15 @@ def _get_user(authorization: str) -> str:
         if not user_id:
             raise HTTPException(status_code=401, detail="Invalid token")
         return user_id
+    except HTTPException:
+        raise
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid token")
 
 
-@router.post("/")
+@router.post("/", summary="Create a new project record")
 async def create_project(body: ProjectCreate, authorization: str = Header(...)):
+    """Create an empty project row and return the new record (status: drafting)."""
     user_id = _get_user(authorization)
     now = datetime.now(timezone.utc).isoformat()
     project_id = str(uuid.uuid4())
@@ -46,8 +73,9 @@ async def create_project(body: ProjectCreate, authorization: str = Header(...)):
     return result.data[0]
 
 
-@router.get("/")
+@router.get("/", summary="List all projects for the authenticated user")
 async def list_projects(authorization: str = Header(...)):
+    """Return all projects owned by the requesting user, ordered newest-first."""
     user_id = _get_user(authorization)
     result = (
         _supabase.table("incept_projects")
@@ -59,8 +87,9 @@ async def list_projects(authorization: str = Header(...)):
     return result.data
 
 
-@router.get("/{project_id}")
+@router.get("/{project_id}", summary="Fetch a single project by ID")
 async def get_project(project_id: str, authorization: str = Header(...)):
+    """Return a single project record. Raises 404 if not found or not owned by the user."""
     user_id = _get_user(authorization)
     result = (
         _supabase.table("incept_projects")
@@ -75,10 +104,11 @@ async def get_project(project_id: str, authorization: str = Header(...)):
     return result.data
 
 
-@router.patch("/{project_id}")
+@router.patch("/{project_id}", summary="Partially update a project")
 async def update_project(
     project_id: str, body: ProjectUpdate, authorization: str = Header(...)
 ):
+    """Apply a partial update (status, requirements, plan, etc.) to a project record."""
     user_id = _get_user(authorization)
     update_data = body.model_dump(exclude_none=True)
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()

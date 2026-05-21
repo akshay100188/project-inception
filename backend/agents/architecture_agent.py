@@ -1,5 +1,12 @@
+"""
+Architecture Agent — recommends a system architecture pattern grounded in pgvector RAG.
+
+Queries the RAG corpus for relevant architecture patterns before prompting Claude,
+ensuring recommendations are reference-backed rather than purely hallucinated.
+"""
 import asyncio
 import json
+import re
 import anthropic
 from config import settings
 from rag.corpus import search, format_context
@@ -28,6 +35,18 @@ Rules:
 
 
 async def run_architecture_agent(state: dict) -> dict:
+    """
+    Design the system architecture using RAG-retrieved patterns and project requirements.
+
+    Performs a semantic search on the architecture corpus, then prompts Claude with
+    the top-k reference documents to produce a grounded architecture recommendation.
+
+    Args:
+        state: LangGraph state dict containing ``requirements`` and ``stream_queue``.
+
+    Returns:
+        Partial state update with ``architecture`` (dict) and next ``stage``.
+    """
     queue: asyncio.Queue = state["stream_queue"]
 
     await queue.put({
@@ -66,7 +85,6 @@ async def run_architecture_agent(state: dict) -> dict:
     try:
         architecture = json.loads(full_response)
     except json.JSONDecodeError:
-        import re
         match = re.search(r"\{.*\}", full_response, re.DOTALL)
         architecture = json.loads(match.group()) if match else {"raw": full_response}
 

@@ -1,3 +1,7 @@
+"""
+Application configuration — loaded from environment variables / .env file.
+All secrets (API keys, DB credentials) must be set before starting the server.
+"""
 from pydantic_settings import BaseSettings
 
 

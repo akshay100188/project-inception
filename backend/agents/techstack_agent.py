@@ -1,5 +1,12 @@
+"""
+Tech Stack Selector agent — recommends technology choices grounded in pgvector RAG.
+
+Combines project requirements and the chosen architecture pattern to query the
+techstack corpus, then prompts Claude to produce layer-by-layer recommendations.
+"""
 import asyncio
 import json
+import re
 import anthropic
 from config import settings
 from rag.corpus import search, format_context
@@ -31,6 +38,16 @@ Rules:
 
 
 async def run_techstack_agent(state: dict) -> dict:
+    """
+    Select the technology stack using RAG-retrieved examples and prior architecture decisions.
+
+    Args:
+        state: LangGraph state dict containing ``requirements``, ``architecture``,
+               and ``stream_queue``.
+
+    Returns:
+        Partial state update with ``tech_stack`` (dict) and next ``stage``.
+    """
     queue: asyncio.Queue = state["stream_queue"]
 
     await queue.put({
@@ -73,7 +90,6 @@ async def run_techstack_agent(state: dict) -> dict:
     try:
         tech_stack = json.loads(full_response)
     except json.JSONDecodeError:
-        import re
         match = re.search(r"\{.*\}", full_response, re.DOTALL)
         tech_stack = json.loads(match.group()) if match else {"raw": full_response}
 

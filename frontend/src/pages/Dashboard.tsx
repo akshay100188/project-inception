@@ -2,6 +2,18 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getAuthHeader } from "../lib/supabase";
 
+type Project = {
+  id: string;
+  raw_input: string;
+  status: string;
+  created_at: string;
+  requirements?: { project_name?: string; domain?: string };
+  plan?: {
+    architecture?: { pattern?: string };
+    estimation?: { mvp_weeks?: number };
+  };
+};
+
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
 const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
@@ -23,17 +35,24 @@ function timeAgo(dateStr: string): string {
 }
 
 export default function Dashboard() {
-  const [projects, setProjects] = useState<any[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
-      const authHeader = await getAuthHeader();
-      const res = await fetch(`${API_BASE}/api/projects/`, {
-        headers: { Authorization: authHeader },
-      });
-      setProjects(await res.json());
-      setLoading(false);
+      try {
+        const authHeader = await getAuthHeader();
+        const res = await fetch(`${API_BASE}/api/projects/`, {
+          headers: { Authorization: authHeader },
+        });
+        if (!res.ok) throw new Error(`Failed to load projects (${res.status})`);
+        setProjects(await res.json());
+      } catch (err: unknown) {
+        setFetchError(err instanceof Error ? err.message : "Unknown error");
+      } finally {
+        setLoading(false);
+      }
     }
     load();
   }, []);
@@ -54,7 +73,11 @@ export default function Dashboard() {
           </Link>
         </div>
 
-        {loading ? (
+        {fetchError ? (
+          <div className="rounded-xl border border-red-800 bg-red-950/50 px-4 py-3 text-sm text-red-300">
+            {fetchError}
+          </div>
+        ) : loading ? (
           <div className="space-y-3">
             {[1, 2, 3].map((i) => (
               <div key={i} className="rounded-xl border border-gray-800 bg-gray-900 px-5 py-4 animate-pulse">
@@ -84,7 +107,7 @@ export default function Dashboard() {
           </div>
         ) : (
           <div className="space-y-3">
-            {projects.map((p) => {
+            {projects.map((p: Project) => {
               const badge = STATUS_BADGE[p.status] ?? STATUS_BADGE.drafting;
               const mvpWeeks = p.plan?.estimation?.mvp_weeks;
               const pattern = p.plan?.architecture?.pattern;

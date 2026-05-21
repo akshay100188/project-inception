@@ -1,5 +1,11 @@
+"""
+Requirement Analyst agent — extracts structured requirements from a raw project idea.
+
+Uses Claude Sonnet with prompt caching to produce a validated JSON requirements object.
+"""
 import asyncio
 import json
+import re
 import anthropic
 from config import settings
 
@@ -29,6 +35,18 @@ Rules:
 
 
 async def run_requirement_agent(state: dict) -> dict:
+    """
+    Extract structured project requirements from the user's raw idea text.
+
+    Streams tokens back through the queue and returns a requirements dict
+    that conforms to the JSON schema defined in _SYSTEM_PROMPT.
+
+    Args:
+        state: LangGraph state dict containing ``raw_input`` and ``stream_queue``.
+
+    Returns:
+        Partial state update with ``requirements`` (dict) and next ``stage``.
+    """
     queue: asyncio.Queue = state["stream_queue"]
 
     await queue.put({"event": "agent_start", "agent": "requirement", "data": "Analyzing your project idea..."})
@@ -59,8 +77,7 @@ async def run_requirement_agent(state: dict) -> dict:
     try:
         requirements = json.loads(full_response)
     except json.JSONDecodeError:
-        # Attempt to extract JSON block if Claude added any surrounding text
-        import re
+        # Claude occasionally wraps JSON in markdown fences — strip and retry
         match = re.search(r"\{.*\}", full_response, re.DOTALL)
         requirements = json.loads(match.group()) if match else {"raw": full_response}
 

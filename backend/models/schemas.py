@@ -1,3 +1,8 @@
+"""
+Pydantic request/response schemas for the Project Inception API.
+
+Defines models for project CRUD, checkpoint resolution, and SSE event payloads.
+"""
 from pydantic import BaseModel
 from typing import Optional
 from uuid import UUID

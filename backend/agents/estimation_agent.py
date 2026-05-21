@@ -1,5 +1,12 @@
+"""
+Estimation Analyst agent — produces timeline, team, and cost estimates grounded in RAG.
+
+Queries historical project benchmarks from the estimation corpus and prompts Claude
+to apply them to the specific requirements, architecture, and tech stack.
+"""
 import asyncio
 import json
+import re
 import anthropic
 from config import settings
 from rag.corpus import search, format_context
@@ -39,6 +46,16 @@ Rules:
 
 
 async def run_estimation_agent(state: dict) -> dict:
+    """
+    Estimate MVP timeline, team composition, and cost range for the project.
+
+    Args:
+        state: LangGraph state dict containing ``requirements``, ``architecture``,
+               ``tech_stack``, and ``stream_queue``.
+
+    Returns:
+        Partial state update with ``estimation`` (dict) and next ``stage``.
+    """
     queue: asyncio.Queue = state["stream_queue"]
 
     await queue.put({
@@ -82,7 +99,6 @@ async def run_estimation_agent(state: dict) -> dict:
     try:
         estimation = json.loads(full_response)
     except json.JSONDecodeError:
-        import re
         match = re.search(r"\{.*\}", full_response, re.DOTALL)
         estimation = json.loads(match.group()) if match else {"raw": full_response}
 

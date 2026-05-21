@@ -1,4 +1,16 @@
+"""
+LangGraph planning graph — wires all agents and checkpoint nodes into a state machine.
+
+Graph topology:
+  requirement → clarification → checkpoint_1 → arch_agent → techstack_agent
+                                     ↑                              ↓
+                              (reject loops back)           estimate_agent → checkpoint_2 → END
+
+Checkpoint nodes block via asyncio.Event until the HTTP checkpoint endpoint resolves them,
+implementing true human-in-the-loop pauses without polling.
+"""
 import asyncio
+import logging
 from langgraph.graph import StateGraph, END
 from supabase import create_client
 from config import settings
@@ -10,20 +22,33 @@ from agents.techstack_agent import run_techstack_agent
 from agents.estimation_agent import run_estimation_agent
 import checkpoint_registry as cr
 
+logger = logging.getLogger(__name__)
+
 _supabase = create_client(settings.supabase_url, settings.supabase_service_key)
 
 
 def route_after_checkpoint_1(state: PlanningState) -> str:
+    """Route to Phase 2 on approval, or loop back to requirement extraction on rejection."""
     if state.get("checkpoint_1_approved"):
         return "arch_agent"
     return "requirement"
 
 
 def route_after_checkpoint_2(state: PlanningState) -> str:
+    """Always terminate after checkpoint 2; the plan has been saved (or rejected)."""
     return END
 
 
 def build_planning_graph() -> StateGraph:
+    """
+    Compile and return the LangGraph state machine.
+
+    Node names are intentionally different from PlanningState field names to avoid
+    LangGraph's internal collision check (e.g. ``arch_agent`` not ``architecture``).
+
+    Returns:
+        A compiled LangGraph ``CompiledStateGraph`` ready to be invoked with ``ainvoke``.
+    """
     graph = StateGraph(PlanningState)
 
     # Node names must not collide with PlanningState field names.
@@ -56,6 +81,13 @@ def build_planning_graph() -> StateGraph:
 
 
 async def _checkpoint_1_node(state: PlanningState) -> dict:
+    """
+    Pause the graph and emit a ``checkpoint`` SSE event for human requirements review.
+
+    Registers an asyncio.Event, then awaits the HTTP checkpoint endpoint to resolve it.
+    If the user submits edited requirements, they are merged back into state before
+    Phase 2 agents run.
+    """
     queue: asyncio.Queue = state["stream_queue"]
     project_id = state["project_id"]
     key = cr.checkpoint_key(project_id, "checkpoint_1")
@@ -82,6 +114,12 @@ async def _checkpoint_1_node(state: PlanningState) -> dict:
 
 
 async def _checkpoint_2_node(state: PlanningState) -> dict:
+    """
+    Pause the graph for final plan review and persist the approved plan to Supabase.
+
+    On approval, writes the full plan JSON (architecture + tech_stack + estimation)
+    to the ``incept_projects`` table and sets status to ``complete``.
+    """
     queue: asyncio.Queue = state["stream_queue"]
     project_id = state["project_id"]
     key = cr.checkpoint_key(project_id, "checkpoint_2")
@@ -114,7 +152,7 @@ async def _checkpoint_2_node(state: PlanningState) -> dict:
                 "plan": plan,
                 "status": "complete",
             }).eq("id", project_id).execute()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.error("Failed to persist plan for project %s: %s", project_id, exc)
 
     return {"stage": PlanningStage.checkpoint_2, "checkpoint_2_approved": True}

@@ -1,3 +1,9 @@
+"""
+Clarification Agent — generates targeted follow-up questions from structured requirements.
+
+Uses Claude Haiku (fast, low-cost) to identify the most impactful gaps before
+architecture planning begins.
+"""
 import asyncio
 import json
 import anthropic
@@ -29,6 +35,15 @@ Rules:
 
 
 async def run_clarification_agent(state: dict) -> dict:
+    """
+    Generate three targeted clarification questions for the extracted requirements.
+
+    Args:
+        state: LangGraph state dict containing ``requirements`` and ``stream_queue``.
+
+    Returns:
+        Partial state update with ``clarification_questions`` (list[str]) and next ``stage``.
+    """
     queue: asyncio.Queue = state["stream_queue"]
 
     await queue.put({"event": "agent_start", "agent": "clarification", "data": "Identifying gaps in requirements..."})

@@ -1,3 +1,8 @@
+"""
+Project Inception — FastAPI application entry point.
+
+Registers middleware, routers, and validates configuration on startup.
+"""
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager

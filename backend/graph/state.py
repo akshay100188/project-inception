@@ -1,3 +1,11 @@
+"""
+LangGraph state definitions for the Project Inception planning pipeline.
+
+PlanningState is the single shared state dict passed between all graph nodes.
+Only the fields actually mutated by a node need to be returned from that node —
+LangGraph merges partial updates.
+"""
+import asyncio
 from typing import TypedDict, Optional
 from enum import Enum
 
@@ -34,5 +42,5 @@ class PlanningState(TypedDict):
     estimation: Optional[dict]
     checkpoint_2_approved: Optional[bool]
 
-    # Streaming callback
-    stream_queue: Optional[object]
+    # Injected at graph start; not persisted — used only for in-flight SSE streaming
+    stream_queue: Optional[asyncio.Queue]

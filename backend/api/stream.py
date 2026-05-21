@@ -1,3 +1,11 @@
+"""
+Stream API — SSE endpoint that runs the LangGraph planning pipeline.
+
+The client connects via POST and receives a continuous ``text/event-stream`` of
+JSON events: ``agent_start``, ``token``, ``agent_done``, ``checkpoint``, ``error``,
+and ``done``.  Checkpoint events pause the stream; the client must resolve the
+checkpoint via ``POST /api/projects/{id}/checkpoint`` to resume.
+"""
 import asyncio
 import json
 from typing import Optional
@@ -35,6 +43,7 @@ async def _event_generator(state: dict):
 
 
 def _format_sse(data: dict) -> str:
+    """Serialize *data* as a single SSE ``data:`` frame (JSON payload, double newline)."""
     payload = json.dumps(data)
     return f"data: {payload}\n\n"
 
@@ -78,11 +87,18 @@ async def stream_run(
 
 
 def _extract_user_id(authorization: str) -> Optional[str]:
-    """Extract user_id from Supabase JWT. Returns None if invalid."""
+    """
+    Extract the ``sub`` (user UUID) from a Supabase JWT.
+
+    Signature verification is omitted; Supabase RLS enforces ownership at the
+    database layer. See ``api/projects.py::_get_user`` for the full rationale.
+
+    Returns:
+        The user UUID string, or ``None`` if the token cannot be decoded.
+    """
     try:
         import jwt
         token = authorization.replace("Bearer ", "")
-        # Supabase JWT — decode without verification in dev; add secret in prod
         decoded = jwt.decode(token, options={"verify_signature": False})
         return decoded.get("sub")
     except Exception:
