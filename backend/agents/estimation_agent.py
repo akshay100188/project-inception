@@ -96,10 +96,11 @@ async def run_estimation_agent(state: dict) -> dict:
             full_response += text
             await queue.put({"event": "token", "agent": "estimation", "data": text})
 
+    cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", full_response.strip())
     try:
-        estimation = json.loads(full_response)
+        estimation = json.loads(cleaned)
     except json.JSONDecodeError:
-        match = re.search(r"\{.*\}", full_response, re.DOTALL)
+        match = re.search(r"\{.*\}", cleaned, re.DOTALL)
         try:
             estimation = json.loads(match.group()) if match else {"raw": full_response}
         except (json.JSONDecodeError, AttributeError):

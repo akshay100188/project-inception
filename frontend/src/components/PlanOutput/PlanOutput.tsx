@@ -112,7 +112,7 @@ function buildMarkdown(
     lines.push("## Estimation");
     lines.push(`- **MVP:** ${estimation.mvp_weeks} weeks`);
     lines.push(`- **Full product:** ${estimation.full_product_weeks} weeks`);
-    lines.push(`- **Team:** ${estimation.recommended_team.size} engineers`);
+    lines.push(`- **Team:** ${estimation.recommended_team?.size ?? "—"} engineers`);
     lines.push(`- **Cost range:** ${fmt(estimation.cost_range.mvp_low)}–${fmt(estimation.cost_range.mvp_high)} ${estimation.cost_range.currency}`);
     lines.push("");
     if (estimation.phases?.length) {
@@ -336,15 +336,15 @@ export function PlanOutput({ requirements, architecture, tech_stack, estimation,
             {/* Headline numbers */}
             <div className="grid grid-cols-3 gap-3">
               <div className="rounded-lg bg-gray-950 border border-gray-800 px-3 py-3 text-center">
-                <p className="text-2xl font-bold text-white">{estimation.mvp_weeks}w</p>
+                <p className="text-2xl font-bold text-white">{estimation.mvp_weeks ?? "—"}w</p>
                 <p className="text-xs text-gray-500 mt-0.5">MVP</p>
               </div>
               <div className="rounded-lg bg-gray-950 border border-gray-800 px-3 py-3 text-center">
-                <p className="text-2xl font-bold text-white">{estimation.full_product_weeks}w</p>
+                <p className="text-2xl font-bold text-white">{estimation.full_product_weeks ?? "—"}w</p>
                 <p className="text-xs text-gray-500 mt-0.5">Full Product</p>
               </div>
               <div className="rounded-lg bg-gray-950 border border-gray-800 px-3 py-3 text-center">
-                <p className="text-2xl font-bold text-white">{estimation.recommended_team.size}</p>
+                <p className="text-2xl font-bold text-white">{estimation.recommended_team?.size ?? "—"}</p>
                 <p className="text-xs text-gray-500 mt-0.5">Engineers</p>
               </div>
             </div>

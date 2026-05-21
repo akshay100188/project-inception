@@ -82,10 +82,11 @@ async def run_architecture_agent(state: dict) -> dict:
             full_response += text
             await queue.put({"event": "token", "agent": "architecture", "data": text})
 
+    cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", full_response.strip())
     try:
-        architecture = json.loads(full_response)
+        architecture = json.loads(cleaned)
     except json.JSONDecodeError:
-        match = re.search(r"\{.*\}", full_response, re.DOTALL)
+        match = re.search(r"\{.*\}", cleaned, re.DOTALL)
         try:
             architecture = json.loads(match.group()) if match else {"raw": full_response}
         except (json.JSONDecodeError, AttributeError):
