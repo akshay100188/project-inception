@@ -19,7 +19,11 @@ _compiled_graph = build_planning_graph()
 
 
 async def _event_generator(state: dict):
-    """Run the LangGraph graph and yield SSE-formatted events from the queue."""
+    """Run the LangGraph graph and yield SSE-formatted events from the queue.
+
+    Sends a ':keepalive' comment every 15 seconds so Railway/proxies don't
+    close the connection during long-running agent phases.
+    """
     queue: asyncio.Queue = state["stream_queue"]
 
     async def run_graph():
@@ -33,7 +37,12 @@ async def _event_generator(state: dict):
     task = asyncio.create_task(run_graph())
 
     while True:
-        item = await queue.get()
+        try:
+            item = await asyncio.wait_for(queue.get(), timeout=15.0)
+        except asyncio.TimeoutError:
+            yield ": keepalive\n\n"   # SSE comment — ignored by clients, resets proxy timeout
+            continue
+
         if item is None:
             yield _format_sse({"event": "done", "data": "Planning complete."})
             break
