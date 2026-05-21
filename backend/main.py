@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from config import settings
-from api import stream, projects
+from api import stream, projects, admin
 
 
 @asynccontextmanager
@@ -31,6 +31,7 @@ app.add_middleware(
 
 app.include_router(stream.router, prefix="/api/stream", tags=["stream"])
 app.include_router(projects.router, prefix="/api/projects", tags=["projects"])
+app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 
 
 @app.get("/health")
