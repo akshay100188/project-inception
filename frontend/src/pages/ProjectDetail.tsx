@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useEffect, useState, useCallback } from "react";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { getAuthHeader } from "../lib/supabase";
 import { PlanOutput } from "../components/PlanOutput/PlanOutput";
 
@@ -19,28 +19,65 @@ const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [project, setProject] = useState<ProjectRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(async () => {
+    if (!id) return;
+    try {
+      const authHeader = await getAuthHeader();
+      const res = await fetch(`${API_BASE}/api/projects/${id}`, {
+        headers: { Authorization: authHeader },
+      });
+      if (!res.ok) throw new Error(`Failed to load project (${res.status})`);
+      setProject(await res.json());
+    } catch (err: unknown) {
+      setFetchError(err instanceof Error ? err.message : "Unknown error");
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
 
   useEffect(() => {
-    if (!id) return;
-    async function load() {
-      try {
-        const authHeader = await getAuthHeader();
-        const res = await fetch(`${API_BASE}/api/projects/${id}`, {
-          headers: { Authorization: authHeader },
-        });
-        if (!res.ok) throw new Error(`Failed to load project (${res.status})`);
-        setProject(await res.json());
-      } catch (err: unknown) {
-        setFetchError(err instanceof Error ? err.message : "Unknown error");
-      } finally {
-        setLoading(false);
-      }
-    }
     load();
-  }, [id]);
+  }, [load]);
+
+  // Poll every 5s while plan is still generating
+  useEffect(() => {
+    if (!project || project.status === "complete" || project.status === "reviewing") return;
+    const timer = setInterval(load, 5000);
+    return () => clearInterval(timer);
+  }, [project, load]);
+
+  async function handleApprove() {
+    if (!id) return;
+    setSaving(true);
+    try {
+      const authHeader = await getAuthHeader();
+      await fetch(`${API_BASE}/api/projects/${id}/checkpoint`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: authHeader },
+        body: JSON.stringify({ action: "approve", checkpoint_name: "checkpoint_2" }),
+      });
+      await load();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleReject() {
+    if (!id) return;
+    const authHeader = await getAuthHeader();
+    await fetch(`${API_BASE}/api/projects/${id}/checkpoint`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: authHeader },
+      body: JSON.stringify({ action: "reject", checkpoint_name: "checkpoint_2" }),
+    });
+    navigate("/");
+  }
 
   if (loading) {
     return (
@@ -67,6 +104,8 @@ export default function ProjectDetail() {
   }
 
   const plan = project.plan ?? {};
+  const isReviewing = project.status === "reviewing";
+  const hasPlan = plan.architecture || plan.tech_stack || plan.estimation;
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
@@ -77,13 +116,28 @@ export default function ProjectDetail() {
           </Link>
         </div>
 
-        {plan.architecture || plan.tech_stack || plan.estimation ? (
-          <PlanOutput
-            requirements={project.requirements}
-            architecture={plan.architecture as any}
-            tech_stack={plan.tech_stack as any}
-            estimation={plan.estimation as any}
-          />
+        {hasPlan ? (
+          <div className="space-y-4">
+            <PlanOutput
+              requirements={project.requirements}
+              architecture={plan.architecture as any}
+              tech_stack={plan.tech_stack as any}
+              estimation={plan.estimation as any}
+              onSave={isReviewing ? handleApprove : undefined}
+              reviewMode={isReviewing}
+            />
+            {isReviewing && (
+              <div className="flex justify-end">
+                <button
+                  onClick={handleReject}
+                  disabled={saving}
+                  className="text-sm text-red-400 border border-red-900 px-4 py-2 rounded-lg hover:bg-red-900/20 transition-colors disabled:opacity-40"
+                >
+                  Reject & Discard
+                </button>
+              </div>
+            )}
+          </div>
         ) : (
           <div className="rounded-xl border border-gray-800 bg-gray-900 p-10 text-center space-y-2">
             <p className="text-gray-400">Plan is still being generated.</p>

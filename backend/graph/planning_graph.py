@@ -130,6 +130,15 @@ async def _checkpoint_2_node(state: PlanningState) -> dict:
         "estimation": state.get("estimation"),
     }
 
+    # Persist plan immediately so the review UI survives SSE disconnects.
+    try:
+        _supabase.table("incept_projects").update({
+            "plan": plan,
+            "status": "reviewing",
+        }).eq("id", project_id).execute()
+    except Exception as exc:
+        logger.error("Failed to pre-save plan for project %s: %s", project_id, exc)
+
     cr.register(key)
     await queue.put({
         "event": "checkpoint",
@@ -146,13 +155,12 @@ async def _checkpoint_2_node(state: PlanningState) -> dict:
     decision = await cr.wait_for_decision(key)
     cr.cleanup(key)
 
-    if decision.get("action") != "reject":
-        try:
-            _supabase.table("incept_projects").update({
-                "plan": plan,
-                "status": "complete",
-            }).eq("id", project_id).execute()
-        except Exception as exc:
-            logger.error("Failed to persist plan for project %s: %s", project_id, exc)
+    final_status = "complete" if decision.get("action") != "reject" else "drafting"
+    try:
+        _supabase.table("incept_projects").update({
+            "status": final_status,
+        }).eq("id", project_id).execute()
+    except Exception as exc:
+        logger.error("Failed to update final status for project %s: %s", project_id, exc)
 
     return {"stage": PlanningStage.checkpoint_2, "checkpoint_2_approved": True}

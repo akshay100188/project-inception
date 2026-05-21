@@ -20,7 +20,7 @@ const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
   drafting:   { label: "Drafting",   cls: "text-gray-400 bg-gray-800/60 border-gray-700" },
   clarifying: { label: "Clarifying", cls: "text-yellow-400 bg-yellow-900/30 border-yellow-800" },
   planning:   { label: "Planning",   cls: "text-blue-400 bg-blue-900/30 border-blue-800" },
-  reviewing:  { label: "Reviewing",  cls: "text-purple-400 bg-purple-900/30 border-purple-800" },
+  reviewing:  { label: "Review Plan", cls: "text-purple-400 bg-purple-900/30 border-purple-800" },
   complete:   { label: "Complete",   cls: "text-green-400 bg-green-900/30 border-green-800" },
 };
 
