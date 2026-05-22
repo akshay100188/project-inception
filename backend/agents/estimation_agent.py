@@ -76,8 +76,13 @@ async def run_estimation_agent(state: dict) -> dict:
         f"with {len(requirements.get('core_features', []))} core features"
     )
 
-    docs = await search(query, category="estimation", top_k=3)
-    context = format_context(docs)
+    # Parallel: real-world project examples + estimation benchmark docs
+    example_docs, bench_docs = await asyncio.gather(
+        search(query, category="project_example", top_k=2),
+        search(query, category="estimation", top_k=3),
+    )
+    examples_context = format_context(example_docs)
+    benchmarks_context = format_context(bench_docs)
     full_response = ""
 
     async with _client.messages.stream(
@@ -87,7 +92,8 @@ async def run_estimation_agent(state: dict) -> dict:
         messages=[{
             "role": "user",
             "content": (
-                f"Reference benchmarks:\n{context}\n\n"
+                f"Similar real-world projects (use actual timelines/costs as calibration):\n{examples_context}\n\n"
+                f"Estimation benchmarks:\n{benchmarks_context}\n\n"
                 f"Project requirements:\n{json.dumps(requirements, indent=2)}\n\n"
                 f"Architecture:\n{json.dumps(architecture, indent=2)}\n\n"
                 f"Tech stack:\n{json.dumps(tech_stack, indent=2)}\n\n"

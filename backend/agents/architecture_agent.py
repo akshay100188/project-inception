@@ -64,8 +64,13 @@ async def run_architecture_agent(state: dict) -> dict:
         f"with {', '.join(f['feature'] for f in requirements.get('core_features', []))}"
     )
 
-    docs = await search(query, category="architecture", top_k=4)
-    context = format_context(docs)
+    # Parallel: real-world project examples + architecture pattern docs
+    example_docs, arch_docs = await asyncio.gather(
+        search(query, category="project_example", top_k=2),
+        search(query, category="architecture", top_k=3),
+    )
+    examples_context = format_context(example_docs)
+    patterns_context = format_context(arch_docs)
     full_response = ""
 
     async with _client.messages.stream(
@@ -75,7 +80,8 @@ async def run_architecture_agent(state: dict) -> dict:
         messages=[{
             "role": "user",
             "content": (
-                f"Reference patterns:\n{context}\n\n"
+                f"Similar real-world projects (use these as grounding precedents):\n{examples_context}\n\n"
+                f"Architecture best-practice patterns:\n{patterns_context}\n\n"
                 f"Project requirements:\n{json.dumps(requirements, indent=2)}\n\n"
                 "Output the architecture JSON."
             ),

@@ -4,10 +4,11 @@ Requirement Analyst agent — extracts structured requirements from a raw projec
 Uses Claude Sonnet with prompt caching to produce a validated JSON requirements object.
 """
 import asyncio
-import json
-import re
 import anthropic
 from config import settings
+from rag import project_examples as _pe
+from rag.corpus import search as _corpus_search, format_context as _format_context
+from agents.agent_utils import parse_json_response
 
 _client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
 
@@ -51,6 +52,29 @@ async def run_requirement_agent(state: dict) -> dict:
 
     await queue.put({"event": "agent_start", "agent": "requirement", "data": "Analyzing your project idea..."})
 
+    # Fetch similar real-world projects as few-shot grounding.
+    # Uses rag_corpus (Supabase) when project_example rows are present;
+    # falls back to local in-memory search if the migration hasn't run yet.
+    try:
+        corpus_results = await _corpus_search(state["raw_input"], category="project_example", top_k=2)
+    except Exception:
+        corpus_results = []
+
+    if corpus_results:
+        similar_projects = corpus_results
+        blocks = _format_context(similar_projects)
+    else:
+        similar_projects = await _pe.search(state["raw_input"], top_k=2)
+        blocks = "\n\n---\n\n".join(f"### {p['title']}\n{p['content']}" for p in similar_projects)
+
+    few_shot_block = ""
+    if similar_projects:
+        few_shot_block = (
+            "\n\nReference projects from similar real-world apps (use to calibrate your output):\n"
+            + blocks
+            + "\n\n---\n"
+        )
+
     full_response = ""
 
     async with _client.messages.stream(
@@ -66,7 +90,7 @@ async def run_requirement_agent(state: dict) -> dict:
         messages=[
             {
                 "role": "user",
-                "content": f"Extract requirements from this project idea:\n\n{state['raw_input']}",
+                "content": f"{few_shot_block}Extract requirements from this project idea:\n\n{state['raw_input']}",
             }
         ],
     ) as stream:
@@ -74,12 +98,7 @@ async def run_requirement_agent(state: dict) -> dict:
             full_response += text
             await queue.put({"event": "token", "agent": "requirement", "data": text})
 
-    try:
-        requirements = json.loads(full_response)
-    except json.JSONDecodeError:
-        # Claude occasionally wraps JSON in markdown fences — strip and retry
-        match = re.search(r"\{.*\}", full_response, re.DOTALL)
-        requirements = json.loads(match.group()) if match else {"raw": full_response}
+    requirements = parse_json_response(full_response, "requirement")
 
     await queue.put({"event": "agent_done", "agent": "requirement", "data": "Requirements extracted."})
 

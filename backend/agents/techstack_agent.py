@@ -68,8 +68,13 @@ async def run_techstack_agent(state: dict) -> dict:
         f"architecture pattern: {architecture.get('pattern', '')}"
     )
 
-    docs = await search(query, category="techstack", top_k=4)
-    context = format_context(docs)
+    # Parallel: real-world project examples + tech stack reference docs
+    example_docs, stack_docs = await asyncio.gather(
+        search(query, category="project_example", top_k=2),
+        search(query, category="techstack", top_k=3),
+    )
+    examples_context = format_context(example_docs)
+    stacks_context = format_context(stack_docs)
     full_response = ""
 
     async with _client.messages.stream(
@@ -79,7 +84,8 @@ async def run_techstack_agent(state: dict) -> dict:
         messages=[{
             "role": "user",
             "content": (
-                f"Reference stacks:\n{context}\n\n"
+                f"Similar real-world projects (use these as grounding precedents):\n{examples_context}\n\n"
+                f"Tech stack reference docs:\n{stacks_context}\n\n"
                 f"Project requirements:\n{json.dumps(requirements, indent=2)}\n\n"
                 f"Architecture decision:\n{json.dumps(architecture, indent=2)}\n\n"
                 "Output the tech stack JSON."
