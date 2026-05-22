@@ -6,7 +6,6 @@ Uses Claude Sonnet with prompt caching to produce a validated JSON requirements 
 import asyncio
 import anthropic
 from config import settings
-from rag import project_examples as _pe
 from rag.corpus import search as _corpus_search, format_context as _format_context
 from agents.agent_utils import parse_json_response
 
@@ -52,20 +51,13 @@ async def run_requirement_agent(state: dict) -> dict:
 
     await queue.put({"event": "agent_start", "agent": "requirement", "data": "Analyzing your project idea..."})
 
-    # Fetch similar real-world projects as few-shot grounding.
-    # Uses rag_corpus (Supabase) when project_example rows are present;
-    # falls back to local in-memory search if the migration hasn't run yet.
+    # Fetch similar real-world projects from Supabase as few-shot grounding.
     try:
-        corpus_results = await _corpus_search(state["raw_input"], category="project_example", top_k=2)
+        similar_projects = await _corpus_search(state["raw_input"], category="project_example", top_k=2)
     except Exception:
-        corpus_results = []
+        similar_projects = []
 
-    if corpus_results:
-        similar_projects = corpus_results
-        blocks = _format_context(similar_projects)
-    else:
-        similar_projects = await _pe.search(state["raw_input"], top_k=2)
-        blocks = "\n\n---\n\n".join(f"### {p['title']}\n{p['content']}" for p in similar_projects)
+    blocks = _format_context(similar_projects)
 
     few_shot_block = ""
     if similar_projects:
