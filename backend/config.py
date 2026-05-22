@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     supabase_service_key: str
     openai_api_key: str
     cors_origins: str = "http://localhost:5173"
+    github_token: str = ""  # optional — raises GitHub rate limit from 60 to 5000 req/hr
 
     model_config = {"env_file": ".env"}
 
