@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { getAuthHeader } from "../lib/supabase";
 import { useAgentStream } from "../hooks/useAgentStream";
-import { PlanOutput } from "../components/PlanOutput/PlanOutput";
 import { CheckpointModal } from "../components/Checkpoint/CheckpointModal";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
@@ -288,36 +287,26 @@ export default function NewProject() {
 
         {/* Plan review — checkpoint_2 */}
         {planData && (
-          <div className="space-y-4">
+          <div className="rounded-2xl border border-amber-900/40 bg-amber-950/20 p-8 space-y-5">
             <div className="flex items-center gap-3">
-              <div className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
-              <p className="text-sm text-amber-400 font-medium">Your plan is ready for review</p>
+              <div className="h-2.5 w-2.5 rounded-full bg-amber-400 animate-pulse flex-shrink-0" />
+              <p className="text-lg font-semibold text-white">Your project plan is ready</p>
             </div>
-
-            <PlanOutput
-              requirements={planData.requirements as any}
-              architecture={planData.architecture as any}
-              tech_stack={planData.tech_stack as any}
-              estimation={planData.estimation as any}
-              onSave={undefined}
-              reviewMode={false}
-            />
-
-            <div className="rounded-xl border border-amber-900/40 bg-amber-950/20 px-4 py-4 flex flex-wrap items-center gap-3">
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-white">Ready to save this plan?</p>
-                <p className="text-xs text-gray-500 mt-0.5">Saving unlocks report & prototype generation</p>
-              </div>
+            <p className="text-sm text-gray-400 leading-relaxed">
+              Claude has designed your complete project plan — architecture, tech stack, and timeline estimates are all set.
+              Save to view the full details and generate your deliverables.
+            </p>
+            <div className="flex flex-wrap items-center gap-3 pt-1">
               <button
                 onClick={handleRejectPlan}
-                className="text-sm text-gray-500 border border-gray-800 px-3 py-1.5 rounded-lg hover:bg-gray-800/40 transition-colors"
+                className="text-sm text-gray-500 border border-gray-700 px-4 py-2 rounded-lg hover:bg-gray-800/40 transition-colors"
               >
                 Discard
               </button>
               <button
                 onClick={handleApprovePlan}
                 disabled={saving}
-                className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 {saving ? (
                   <>

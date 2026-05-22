@@ -300,7 +300,7 @@ export default function ProjectDetail() {
                     </span>
                   </div>
                   <p className="text-xs text-gray-500 leading-relaxed">
-                    19-section HTML report with architecture, timelines, budget & risk analysis. Open in browser to print as PDF.
+                    19-section HTML report — architecture, timelines, budget & risk analysis. Takes ~3–4 minutes to generate. Open in browser to print as PDF.
                   </p>
                 </button>
 
@@ -326,7 +326,7 @@ export default function ProjectDetail() {
                     </span>
                   </div>
                   <p className="text-xs text-gray-500 leading-relaxed">
-                    5-screen wireframe document showing all key app views with realistic sample data. All screens visible at once.
+                    5-screen wireframe document — all key app views with realistic sample data. Takes ~2–3 minutes to generate.
                   </p>
                 </button>
               </div>
