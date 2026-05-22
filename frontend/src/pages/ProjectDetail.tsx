@@ -81,7 +81,7 @@ export default function ProjectDetail() {
     navigate("/");
   }
 
-  async function openGeneratedHtml(endpoint: string, errorLabel: string, setLoading: (v: boolean) => void) {
+  async function downloadHtml(endpoint: string, filename: string, errorLabel: string, setLoading: (v: boolean) => void) {
     if (!id) return;
     setLoading(true);
     try {
@@ -92,8 +92,30 @@ export default function ProjectDetail() {
       });
       if (!res.ok) throw new Error(`${errorLabel} failed (${res.status})`);
       const html = await res.text();
-      const blob = new Blob([html], { type: "text/html" });
-      window.open(URL.createObjectURL(blob), "_blank");
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+      a.download = filename;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 60_000);
+    } catch (err: any) {
+      alert(`${errorLabel}: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function openInTab(endpoint: string, errorLabel: string, setLoading: (v: boolean) => void) {
+    if (!id) return;
+    setLoading(true);
+    try {
+      const authHeader = await getAuthHeader();
+      const res = await fetch(`${API_BASE}/api/projects/${id}/${endpoint}`, {
+        method: "POST",
+        headers: { Authorization: authHeader },
+      });
+      if (!res.ok) throw new Error(`${errorLabel} failed (${res.status})`);
+      const html = await res.text();
+      window.open(URL.createObjectURL(new Blob([html], { type: "text/html" })), "_blank");
     } catch (err: any) {
       alert(`${errorLabel}: ${err.message}`);
     } finally {
@@ -102,10 +124,10 @@ export default function ProjectDetail() {
   }
 
   const handleGenerateReport = () =>
-    openGeneratedHtml("report", "Report generation", setGeneratingReport);
+    downloadHtml("report", "project-plan-report.html", "Report generation", setGeneratingReport);
 
   const handleGeneratePrototype = () =>
-    openGeneratedHtml("prototype", "Prototype generation", setGeneratingPrototype);
+    openInTab("prototype", "Prototype generation", setGeneratingPrototype);
 
   if (loading) {
     return (

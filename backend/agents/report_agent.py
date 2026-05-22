@@ -1,11 +1,10 @@
 """
 Report Generator agent — produces a comprehensive, print-ready HTML planning document.
 
-Generates the report in three parts to stay within model output limits (~8k tokens each):
-  Part A: cover + TOC + sections 1–10 (structure through tech stack)
-  Part B: sections 11–15 (database, infrastructure, security, budget chart, Gantt chart)
-  Part C: sections 16–19 (risk register, readiness, approach, deliverables) + closing tags
-All three parts are stitched into a single self-contained HTML file.
+Generates in three sequential API calls to stay within the 8k output token limit:
+  Part A: <!DOCTYPE html> … sections 1–10, main wrapper div left OPEN
+  Part B: sections 11–15 as bare <section> elements (no wrapper)
+  Part C: sections 16–19 as bare <section> elements + </div></body></html>
 """
 import json
 import logging
@@ -15,93 +14,178 @@ from config import settings
 _client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
 logger = logging.getLogger(__name__)
 
-_STYLE_NOTE = """
-Style rules (consistent across all parts):
-- Tailwind CSS via CDN already loaded in <head>
-- Chart.js via CDN already loaded in <head>
-- White background, indigo/blue primary accent color
-- Each section: `<section class="page-section" id="sec-N">` with colored left-border heading
-- `<div class="page-break"></div>` between major sections for PDF page breaks
-- All tables: alternating row backgrounds (bg-gray-50 / white), sticky headers where helpful
-- @media print CSS applied globally from Part A's <style>
-- Footer "Prepared by Project Inception AI" on each conceptual page
-"""
+# --------------------------------------------------------------------------- #
+# System prompts
+# --------------------------------------------------------------------------- #
 
-_SYSTEM_PROMPT_A = """You are a senior technical consultant producing a professional project planning document.
+_SYSTEM_PROMPT_A = """You are a senior technical consultant writing a professional project planning document in HTML.
 
-Generate the FIRST PART of a complete single-file HTML planning document.
-""" + _STYLE_NOTE + """
+Generate Part A of the report: the full document shell (DOCTYPE, head, CSS) plus sections 1–10.
 
-## Your output must include:
+## Exact HTML skeleton to follow:
 
-- Full `<!DOCTYPE html>` … `<head>` with Tailwind CDN, Chart.js CDN, and a `<style>` block containing:
-  - `.page-section { margin: 2rem 0; padding: 1.5rem; }` and similar base styles
-  - `.page-break { page-break-after: always; break-after: page; }`
-  - `@media print { nav { display:none; } .page-break { page-break-after: always; } body { font-size: 11pt; } }`
-  - A sticky left-border heading style for section titles
-- Opening `<body>` and a centered max-width wrapper `<div class="max-w-4xl mx-auto px-6 py-8">`
+```
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[Project Name] — Planning Report</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    @media print {
+      .no-print { display: none !important; }
+      .page-break { page-break-after: always; break-after: page; }
+      body { font-size: 11pt; }
+    }
+    .section-heading {
+      border-left: 4px solid #4f46e5;
+      padding-left: 12px;
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #1e1b4b;
+      margin-bottom: 1rem;
+    }
+    .page-break { page-break-after: always; break-after: page; margin: 2rem 0; }
+    table { width: 100%; border-collapse: collapse; }
+    th { background: #eef2ff; color: #3730a3; padding: 8px 12px; text-align: left; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    td { padding: 8px 12px; border-bottom: 1px solid #e5e7eb; font-size: 0.9rem; }
+    tr:nth-child(even) td { background: #f9fafb; }
+    .badge { display: inline-block; padding: 2px 10px; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
+    footer { text-align: center; font-size: 0.7rem; color: #9ca3af; margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #e5e7eb; }
+  </style>
+</head>
+<body class="bg-white text-gray-800 font-sans">
+<div class="max-w-4xl mx-auto px-8 py-10">
+```
 
-Then generate these sections:
+Then generate content for:
 
-1. **Cover Page** (`id="sec-1"`) — project name large, tagline, today's date, "Confidential Planning Document" badge
-2. **Table of Contents** (`id="sec-2"`) — anchor links to all 19 sections (#sec-1 … #sec-19), numbered list
-3. **Executive Summary** (`id="sec-3"`) — 3–4 sentences; metrics row showing MVP weeks, team size, cost range, confidence level
-4. **Business Problem Statement** (`id="sec-4"`) — numbered list of pain points from requirements
-5. **Proposed Solution** (`id="sec-5"`) — bulleted list of platform capabilities
-6. **Target Users** (`id="sec-6"`) — two-column card layout: primary users vs secondary users
-7. **Scope Definition** (`id="sec-7"`) — two-column table: In Scope | Out of Scope
-8. **Functional Modules** (`id="sec-8"`) — HTML table: Module | Description | Priority (Priority cell color-coded)
-9. **System Architecture** (`id="sec-9"`) — pattern badge + rationale paragraph, components table (Name | Role | Tech Hint), data flow narrative, key decisions list
-10. **Technology Stack** (`id="sec-10"`) — card grid per layer (Frontend/Backend/Database/Auth/Infrastructure), alternatives table if present
+**Section 1 — Cover Page** (`<section id="sec-1">`)
+- Large project name, tagline, today's date, "Confidential Planning Document" badge (indigo bg)
+- "Prepared by Project Inception AI" subtitle
+- Full-page feel: `min-height: 60vh; display:flex; flex-direction:column; justify-content:center`
 
-## CRITICAL: End your output with EXACTLY this marker and nothing after it:
+**Section 2 — Table of Contents** (`<section id="sec-2">`)
+- Numbered list, all 19 sections, hyperlinked to #sec-1 through #sec-19
+- Two-column layout inside the section only
+
+**Section 3 — Executive Summary** (`<section id="sec-3">`)
+- 3–4 sentence paragraph
+- Metrics row: 4 cards side by side (MVP weeks | Full weeks | Team size | Confidence)
+
+**Section 4 — Business Problem Statement** (`<section id="sec-4">`)
+- Numbered list of 4–6 pain points derived from requirements
+
+**Section 5 — Proposed Solution** (`<section id="sec-5">`)
+- Bulleted list of 5–7 platform capabilities
+
+**Section 6 — Target Users** (`<section id="sec-6">`)
+- Two cards side by side: Primary Users | Secondary Users (each with bullet list of characteristics)
+
+**Section 7 — Scope Definition** (`<section id="sec-7">`)
+- Single table: "In Scope" column | "Out of Scope" column
+
+**Section 8 — Functional Modules** (`<section id="sec-8">`)
+- Table: Module | Description | Priority (Priority cell: must-have=indigo badge, nice-to-have=gray badge)
+
+**Section 9 — System Architecture** (`<section id="sec-9">`)
+- Architecture pattern badge, rationale paragraph
+- Components table: Name | Role | Tech Hint
+- Data flow narrative paragraph
+- Key decisions as numbered list
+
+**Section 10 — Technology Stack** (`<section id="sec-10">`)
+- Card grid (2 columns): one card per layer (Frontend / Backend / Database / Auth / Infrastructure)
+- Each card: layer name, tech name bold, rationale small text, key libs as inline tags
+- If alternatives exist: small table below the grid
+
+## CRITICAL — how to end Part A:
+
+After section 10, add a footer inside the section, then output EXACTLY:
 <!-- PART_A_END -->
 
-Do NOT write </body> or </html>. Do NOT generate sections 11-19.
-Output ONLY valid HTML — no markdown fences, no explanations."""
+Do NOT close the `<div class="max-w-4xl mx-auto">` wrapper.
+Do NOT write </body> or </html>.
+Do NOT generate sections 11–19.
+Output raw HTML only — no markdown fences, no comments outside the HTML."""
 
-_SYSTEM_PROMPT_B = """You are continuing a professional HTML planning document. Sections 1-10 and all CSS/JS are already generated.
+_SYSTEM_PROMPT_B = """You are continuing a professional HTML planning document. Sections 1–10 are already generated inside an open `<div class="max-w-4xl mx-auto px-8 py-10">` wrapper.
 
-Generate ONLY the HTML for sections 11-15 — no DOCTYPE, no <html>, no <head>, no repeated <style> or CDN tags.
-Use the same Tailwind classes and indigo/blue color scheme.
-""" + _STYLE_NOTE + """
+Generate ONLY sections 11–15 as bare `<section>` elements. Rules:
+- Do NOT output DOCTYPE, html, head, body, style, or any wrapper divs
+- Start your output directly with `<div class="page-break"></div><section id="sec-11">`
+- Close every `<section>` properly before starting the next one
+- Use the same CSS classes defined in Part A (section-heading, badge, page-break, table styles)
+- Chart.js is already loaded — you can use `<canvas>` + inline `<script>` for charts
 
-## Generate these sections:
+**Section 11 — Database Design** (`<section id="sec-11">`)
+- Recommended DB with rationale paragraph
+- Entity overview: table with columns Entity | Key Fields | Relationships
+- Schema hints paragraph
 
-11. **Database Design** (`id="sec-11"`) — recommended DB engine, schema hints, entity overview table (Entity | Key Fields | Relationships), rationale paragraph
-12. **Infrastructure Plan** (`id="sec-12"`) — table: Layer | Service | Rationale; plus a deployment topology narrative paragraph
-13. **Security Recommendations** (`id="sec-13"`) — two-column layout table: Required Now | Recommended Later, each with 4-5 specific items
-14. **Budget Projection** (`id="sec-14"`) — cost breakdown table (Category | Estimate | Notes); PLUS a Chart.js doughnut chart using REAL cost numbers from the estimation data; total range prominently displayed
-15. **Team & Timeline** (`id="sec-15"`) — team roles table (Role | Responsibilities | % Time); PLUS a Chart.js horizontal bar Gantt chart using REAL phase names and week counts from the estimation data
+**Section 12 — Infrastructure Plan** (`<section id="sec-12">`)
+- Table: Layer | Service | Rationale
+- Deployment topology narrative paragraph
 
-## CRITICAL: End your output with EXACTLY this marker and nothing after it:
+**Section 13 — Security Recommendations** (`<section id="sec-13">`)
+- Table with two columns: Required Now | Recommended Later (4–5 rows each)
+
+**Section 14 — Budget Projection** (`<section id="sec-14">`)
+- Cost breakdown table: Category | Low Estimate | High Estimate | Notes
+- USE THE ACTUAL mvp_low and mvp_high numbers from estimation data
+- Chart.js doughnut chart showing cost category breakdown (inline canvas + script)
+- Total range prominently shown
+
+**Section 15 — Team & Timeline** (`<section id="sec-15">`)
+- Team roles table: Role | Responsibilities | Count
+- Chart.js horizontal bar Gantt chart using ACTUAL phase names and week counts from estimation.phases
+- Footer line: total MVP duration and full product duration
+
+## End with EXACTLY:
 <!-- PART_B_END -->
 
-Do NOT write </body> or </html>. Do NOT generate sections 16-19.
-Output ONLY valid HTML — no markdown fences."""
+Do NOT write </div></body></html>. Output raw HTML only."""
 
-_SYSTEM_PROMPT_C = """You are completing a professional HTML planning document. Sections 1-15 and all CSS/JS are already generated.
+_SYSTEM_PROMPT_C = """You are completing a professional HTML planning document. Sections 1–15 are already generated inside an open `<div class="max-w-4xl mx-auto px-8 py-10">` wrapper.
 
-Generate ONLY the HTML for sections 16-19 plus the proper document closing tags.
-No DOCTYPE, no <html>, no <head>, no repeated <style> or CDN tags.
-Use the same Tailwind classes and indigo/blue color scheme.
-""" + _STYLE_NOTE + """
+Generate sections 16–19 as bare `<section>` elements, then close the document. Rules:
+- Do NOT output DOCTYPE, html, head, body, style, or any wrapper divs
+- Start your output directly with `<div class="page-break"></div><section id="sec-16">`
+- Close every `<section>` properly before starting the next one
+- Use the same CSS classes: section-heading, badge, page-break, table styles
 
-## Generate these sections:
+**Section 16 — Risk Register** (`<section id="sec-16">`)
+- Table: Risk | Severity | Probability | Mitigation
+- Left border color per row: `style="border-left: 4px solid #ef4444"` for High, `#f59e0b` for Medium, `#10b981` for Low
+- 5–6 realistic risks derived from the project domain and tech stack
 
-16. **Risk Register** (`id="sec-16"`) — table: Risk | Severity | Mitigation; left-border color per row: red border for High, yellow for Medium, green for Low; derive 4-6 realistic risks from the project data
-17. **Implementation Readiness** (`id="sec-17"`) — table: Area | Status | Notes; Status shown as a colored badge (Ready=green, Partial=yellow, Pending=red); cover areas like Team, Infrastructure, Data, Compliance, Testing
-18. **Recommended Implementation Approach** (`id="sec-18"`) — numbered step-by-step plan (6-8 steps) with a short description per step
-19. **Deliverables Summary** (`id="sec-19"`) — checklist of all artifacts this engagement produces (checkboxes styled with ✓), grouped by category
+**Section 17 — Implementation Readiness** (`<section id="sec-17">`)
+- Table: Area | Status | Notes
+- Status as colored badge: Ready=green, Partial=yellow, Pending=red
+- Areas: Team, Infrastructure, Third-party APIs, Security, Testing, Compliance
 
-After section 19, close the document:
-```
-  </div><!-- end main wrapper -->
-  </body>
+**Section 18 — Recommended Implementation Approach** (`<section id="sec-18">`)
+- Numbered list of 6–8 sequential steps, each with a bold title and 1–2 sentence description
+
+**Section 19 — Deliverables Summary** (`<section id="sec-19">`)
+- Checklist grouped by category (Planning / Technical / Documentation / Launch)
+- Each item: ☐ checkbox style, artifact name, brief description
+
+After section 19 add:
+```html
+<footer>Prepared by Project Inception AI · Confidential · Generated on [today's date]</footer>
+</div>
+</body>
 </html>
 ```
 
-Output ONLY valid HTML — no markdown fences."""
+Output raw HTML only — no markdown fences."""
+
+# --------------------------------------------------------------------------- #
+# Helpers
+# --------------------------------------------------------------------------- #
 
 
 async def _call(system: str, user_content: str, label: str) -> str:
@@ -132,26 +216,30 @@ def _strip_fences(html: str) -> str:
     return s
 
 
-def _cut_at(html: str, marker: str) -> str:
-    """Return everything before marker; if missing, strip accidental closing tags."""
+def _cut_before(html: str, marker: str) -> str:
+    """Keep only the content before `marker`; fall back to stripping closing tags."""
     if marker in html:
         return html.split(marker)[0].rstrip()
-    # Marker absent — trim accidental closing tags Claude may have added
-    for tag in ["</body>", "</html>"]:
+    for tag in ("</body>", "</html>"):
         if html.rstrip().endswith(tag):
             html = html.rstrip()[: -len(tag)].rstrip()
     return html
 
 
-def _remove_doc_boilerplate(html: str) -> str:
-    """Strip any accidental DOCTYPE/html/head re-declarations from continuation parts."""
+def _drop_doc_shell(html: str) -> str:
+    """Remove any accidental DOCTYPE/html/head re-declarations from continuation parts."""
     if "<!DOCTYPE" not in html and "<html" not in html:
         return html
-    for tag in ["<section", "<div"]:
+    for tag in ("<div class=\"page-break\"", "<section"):
         idx = html.find(tag)
         if idx != -1:
             return html[idx:]
     return html
+
+
+# --------------------------------------------------------------------------- #
+# Public API
+# --------------------------------------------------------------------------- #
 
 
 async def generate_report(
@@ -161,7 +249,7 @@ async def generate_report(
     estimation: dict,
 ) -> str:
     """
-    Generate a comprehensive 19-section HTML planning document via three API calls.
+    Generate a 19-section professional HTML planning document via three API calls.
     Returns stitched HTML ready to serve as text/html.
     """
     plan_json = (
@@ -171,17 +259,24 @@ async def generate_report(
         f"Estimation:\n{json.dumps(estimation, indent=2)}"
     )
 
-    user_a = plan_json + "\n\nGenerate Part A (sections 1–10). Use real data throughout."
-    user_b = plan_json + "\n\nGenerate Part B (sections 11–15). Use real cost/phase numbers for charts."
-    user_c = plan_json + "\n\nGenerate Part C (sections 16–19 + closing tags). Derive risks from actual project data."
+    part_a = _strip_fences(await _call(
+        _SYSTEM_PROMPT_A,
+        plan_json + "\n\nGenerate Part A (sections 1–10). Derive all content from the plan data.",
+        "Part-A",
+    ))
+    part_b = _strip_fences(await _call(
+        _SYSTEM_PROMPT_B,
+        plan_json + "\n\nGenerate Part B (sections 11–15). Use real numbers for charts.",
+        "Part-B",
+    ))
+    part_c = _strip_fences(await _call(
+        _SYSTEM_PROMPT_C,
+        plan_json + "\n\nGenerate Part C (sections 16–19 + closing). Derive risks from the actual stack.",
+        "Part-C",
+    ))
 
-    # Run sequentially — each part is independent content-wise
-    part_a = _strip_fences(await _call(_SYSTEM_PROMPT_A, user_a, "Part-A"))
-    part_b = _strip_fences(await _call(_SYSTEM_PROMPT_B, user_b, "Part-B"))
-    part_c = _strip_fences(await _call(_SYSTEM_PROMPT_C, user_c, "Part-C"))
-
-    part_a = _cut_at(part_a, "<!-- PART_A_END -->")
-    part_b = _cut_at(_remove_doc_boilerplate(part_b), "<!-- PART_B_END -->")
-    part_c = _remove_doc_boilerplate(part_c)
+    part_a = _cut_before(part_a, "<!-- PART_A_END -->")
+    part_b = _cut_before(_drop_doc_shell(part_b), "<!-- PART_B_END -->")
+    part_c = _drop_doc_shell(part_c)
 
     return (part_a + "\n\n" + part_b + "\n\n" + part_c).strip()
