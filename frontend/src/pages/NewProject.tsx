@@ -42,7 +42,8 @@ export default function NewProject() {
   const { agents, checkpoint, planData, isStreaming, isDone, error, startStream, clearCheckpoint } =
     useAgentStream();
 
-  const isGenerating = isStreaming || (Object.keys(agents).length > 0 && !planData && !isDone);
+  // Stop showing loading screen once planData arrives (SSE stream stays open at checkpoint_2)
+  const isGenerating = !planData && !isDone && (isStreaming || Object.keys(agents).length > 0);
 
   // Cycle through stage labels while loading
   useEffect(() => {
@@ -285,42 +286,36 @@ export default function NewProject() {
           </div>
         )}
 
-        {/* Plan review — checkpoint_2 */}
+        {/* Plan review — checkpoint_2: show only the save action, nothing else */}
         {planData && (
-          <div className="rounded-2xl border border-amber-900/40 bg-amber-950/20 p-8 space-y-5">
-            <div className="flex items-center gap-3">
+          <div className="rounded-2xl border border-amber-900/40 bg-amber-950/20 px-8 py-7 flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-3 flex-1 min-w-0">
               <div className="h-2.5 w-2.5 rounded-full bg-amber-400 animate-pulse flex-shrink-0" />
-              <p className="text-lg font-semibold text-white">Your project plan is ready</p>
+              <p className="text-base font-semibold text-white">Your plan is ready to save</p>
             </div>
-            <p className="text-sm text-gray-400 leading-relaxed">
-              Claude has designed your complete project plan — architecture, tech stack, and timeline estimates are all set.
-              Save to view the full details and generate your deliverables.
-            </p>
-            <div className="flex flex-wrap items-center gap-3 pt-1">
-              <button
-                onClick={handleRejectPlan}
-                className="text-sm text-gray-500 border border-gray-700 px-4 py-2 rounded-lg hover:bg-gray-800/40 transition-colors"
-              >
-                Discard
-              </button>
-              <button
-                onClick={handleApprovePlan}
-                disabled={saving}
-                className="flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                {saving ? (
-                  <>
-                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-                    </svg>
-                    Saving…
-                  </>
-                ) : (
-                  "Save Plan & Continue →"
-                )}
-              </button>
-            </div>
+            <button
+              onClick={handleRejectPlan}
+              className="text-sm text-gray-500 border border-gray-700 px-4 py-2 rounded-lg hover:bg-gray-800/40 transition-colors"
+            >
+              Discard
+            </button>
+            <button
+              onClick={handleApprovePlan}
+              disabled={saving}
+              className="flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              {saving ? (
+                <>
+                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                  </svg>
+                  Saving…
+                </>
+              ) : (
+                "Save Plan & Continue →"
+              )}
+            </button>
           </div>
         )}
 
