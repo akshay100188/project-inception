@@ -131,9 +131,11 @@ async def _checkpoint_2_node(state: PlanningState) -> dict:
     }
 
     # Persist plan immediately so the review UI survives SSE disconnects.
+    # requirements is saved here so the report/prototype endpoints can use it.
     try:
         _supabase.table("incept_projects").update({
             "plan": plan,
+            "requirements": state.get("requirements"),
             "status": "reviewing",
         }).eq("id", project_id).execute()
     except Exception as exc:
