@@ -43,7 +43,7 @@ create extension if not exists vector;
 
 create table if not exists public.rag_corpus (
   id          uuid primary key default gen_random_uuid(),
-  category    text not null check (category in ('architecture', 'techstack', 'estimation')),
+  category    text not null check (category in ('architecture', 'techstack', 'estimation', 'project_example')),
   title       text not null,
   content     text not null,
   embedding   vector(1536),
@@ -54,6 +54,17 @@ create table if not exists public.rag_corpus (
 create index if not exists rag_corpus_embedding_idx
   on public.rag_corpus using ivfflat (embedding vector_cosine_ops)
   with (lists = 10);
+
+-- ────────────────────────────────────────────────────────────
+-- Migration M001: add project_example category
+-- Run ONCE in Supabase SQL editor if rag_corpus already exists
+-- (skip if running schema.sql fresh — the constraint below already includes it)
+-- ────────────────────────────────────────────────────────────
+-- ALTER TABLE public.rag_corpus DROP CONSTRAINT rag_corpus_category_check;
+-- ALTER TABLE public.rag_corpus ADD CONSTRAINT rag_corpus_category_check
+--   CHECK (category IN ('architecture', 'techstack', 'estimation', 'project_example'));
+--
+-- Then run: python -m scripts.migrate_examples_to_supabase
 
 create or replace function public.match_corpus(
   query_embedding vector(1536),
