@@ -85,25 +85,30 @@ async def run_estimation_agent(state: dict) -> dict:
     benchmarks_context = format_context(bench_docs)
     full_response = ""
 
-    async with _client.messages.stream(
-        model="claude-sonnet-4-6",
-        max_tokens=1024,
-        system=[{"type": "text", "text": _SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
-        messages=[{
-            "role": "user",
-            "content": (
-                f"Similar real-world projects (use actual timelines/costs as calibration):\n{examples_context}\n\n"
-                f"Estimation benchmarks:\n{benchmarks_context}\n\n"
-                f"Project requirements:\n{json.dumps(requirements, indent=2)}\n\n"
-                f"Architecture:\n{json.dumps(architecture, indent=2)}\n\n"
-                f"Tech stack:\n{json.dumps(tech_stack, indent=2)}\n\n"
-                "Output the estimation JSON."
-            ),
-        }],
-    ) as stream:
-        async for text in stream.text_stream:
-            full_response += text
-            await queue.put({"event": "token", "agent": "estimation", "data": text})
+    try:
+        async with _client.messages.stream(
+            model="claude-sonnet-4-6",
+            max_tokens=2048,
+            system=[{"type": "text", "text": _SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
+            messages=[{
+                "role": "user",
+                "content": (
+                    f"Similar real-world projects (use actual timelines/costs as calibration):\n{examples_context}\n\n"
+                    f"Estimation benchmarks:\n{benchmarks_context}\n\n"
+                    f"Project requirements:\n{json.dumps(requirements, indent=2)}\n\n"
+                    f"Architecture:\n{json.dumps(architecture, indent=2)}\n\n"
+                    f"Tech stack:\n{json.dumps(tech_stack, indent=2)}\n\n"
+                    "Output the estimation JSON."
+                ),
+            }],
+        ) as stream:
+            async for text in stream.text_stream:
+                full_response += text
+                await queue.put({"event": "token", "agent": "estimation", "data": text})
+    except Exception as exc:
+        logger.error("Estimation API call failed: %s", exc)
+
+    logger.info("Estimation raw response (%d chars): %.1000s", len(full_response), full_response)
 
     estimation = parse_json_response(full_response, "estimation")
 

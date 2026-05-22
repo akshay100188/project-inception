@@ -38,21 +38,22 @@ def parse_json_response(full_response: str, agent_name: str) -> dict:
     except json.JSONDecodeError:
         pass
 
-    # Strategy 3: raw_decode — finds first valid JSON object at any offset
+    # Strategy 3: raw_decode — scans both original and fence-stripped text for the first
+    # valid JSON object, ignoring any surrounding prose Claude may have added.
     decoder = json.JSONDecoder()
-    search_text = text
-    pos = 0
-    while True:
-        start = search_text.find("{", pos)
-        if start == -1:
-            break
-        try:
-            obj, _ = decoder.raw_decode(search_text, start)
-            if isinstance(obj, dict):
-                return obj
-        except json.JSONDecodeError:
-            pass
-        pos = start + 1
+    for search_text in [text, stripped]:
+        pos = 0
+        while True:
+            start = search_text.find("{", pos)
+            if start == -1:
+                break
+            try:
+                obj, _ = decoder.raw_decode(search_text, start)
+                if isinstance(obj, dict):
+                    return obj
+            except json.JSONDecodeError:
+                pass
+            pos = start + 1
 
     _log.warning(
         "[%s] JSON extraction failed — first 400 chars: %.400s",
