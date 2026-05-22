@@ -37,13 +37,13 @@ export default function NewProject() {
   const [dragOver, setDragOver] = useState(false);
   const [stageIdx, setStageIdx] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const { agents, checkpoint, planData, isStreaming, isDone, error, startStream, clearCheckpoint } =
+  const { checkpoint, planData, isDone, error, startStream, clearCheckpoint } =
     useAgentStream();
 
-  // Stop showing loading screen once planData arrives (SSE stream stays open at checkpoint_2)
-  const isGenerating = !planData && !isDone && (isStreaming || Object.keys(agents).length > 0);
+  const isGenerating = submitted && !planData && !isDone && !error;
 
   // Cycle through stage labels while loading
   useEffect(() => {
@@ -62,6 +62,8 @@ export default function NewProject() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!rawInput.trim()) return;
+
+    setSubmitted(true);
 
     const authHeader = await getAuthHeader();
     const res = await fetch(`${API_BASE}/api/projects/`, {
@@ -146,7 +148,7 @@ export default function NewProject() {
     if (file) parseFile(file);
   }
 
-  const showForm = !isGenerating && !planData && !isDone && !error;
+  const showForm = !submitted;
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
