@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { getAuthHeader } from "../lib/supabase";
 import { PlanOutput } from "../components/PlanOutput/PlanOutput";
+import { CheckpointModal } from "../components/Checkpoint/CheckpointModal";
+import { useAgentStream } from "../hooks/useAgentStream";
 
 type ProjectRecord = {
   id: string;
@@ -35,6 +37,11 @@ export default function ProjectDetail() {
   const [generatingPrototype, setGeneratingPrototype] = useState(false);
   const [generatingReport, setGeneratingReport] = useState(false);
   const [stageIdx, setStageIdx] = useState(0);
+  const [streamActive, setStreamActive] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
+
+  const { checkpoint, planData, isDone, error: streamError, startStream, clearCheckpoint } =
+    useAgentStream();
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -56,19 +63,61 @@ export default function ProjectDetail() {
     load();
   }, [load]);
 
-  // Poll every 5s while plan is still generating
+  // After stream completes successfully, reload the project to get saved data
   useEffect(() => {
-    if (!project || project.status === "complete" || project.status === "reviewing") return;
-    const timer = setInterval(load, 5000);
-    return () => clearInterval(timer);
-  }, [project, load]);
+    if (isDone && !streamError) {
+      load();
+    }
+  }, [isDone, streamError, load]);
 
   // Cycle through stage labels during generation
   useEffect(() => {
-    if (project?.status === "complete" || project?.status === "reviewing") return;
+    if (!streamActive) return;
     const timer = setInterval(() => setStageIdx(i => (i + 1) % GENERATION_STAGES.length), 9000);
     return () => clearInterval(timer);
-  }, [project?.status]);
+  }, [streamActive]);
+
+  async function handleRetry() {
+    if (!project) return;
+    setRetryError(null);
+    setStreamActive(true);
+    try {
+      await startStream(project.id, project.raw_input);
+    } catch (err: any) {
+      setRetryError(err.message ?? "Something went wrong. Please try again.");
+      setStreamActive(false);
+    }
+  }
+
+  async function postCheckpoint(checkpointName: string, action: string, edited?: object) {
+    if (!id) return;
+    const authHeader = await getAuthHeader();
+    await fetch(`${API_BASE}/api/projects/${id}/checkpoint`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: authHeader },
+      body: JSON.stringify({ action, checkpoint_name: checkpointName, edited_content: edited }),
+    });
+  }
+
+  async function handleCheckpoint1Decision(action: "approve" | "edit" | "reject", edited?: object) {
+    clearCheckpoint();
+    await postCheckpoint("checkpoint_1", action, edited);
+    if (action === "reject") navigate("/");
+  }
+
+  async function handleApprovePlan() {
+    setSaving(true);
+    try {
+      await postCheckpoint("checkpoint_2", "approve");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleRejectPlan() {
+    await postCheckpoint("checkpoint_2", "reject");
+    navigate("/");
+  }
 
   async function handleApprove() {
     if (!id) return;
@@ -158,8 +207,14 @@ export default function ProjectDetail() {
   const plan = project.plan ?? {};
   const isReviewing = project.status === "reviewing";
   const isComplete = project.status === "complete";
-  const isGenerating = !isReviewing && !isComplete;
   const hasPlan = !!(plan.architecture || plan.tech_stack || plan.estimation);
+
+  // Only show the generating screen when we actively started a stream
+  const isGenerating = streamActive && !planData && !isDone && !streamError;
+  const displayError = streamError ?? retryError;
+
+  // A draft/failed project that isn't currently streaming — show retry card
+  const isDraft = !isReviewing && !isComplete && !streamActive;
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
@@ -168,7 +223,35 @@ export default function ProjectDetail() {
           ← Dashboard
         </Link>
 
-        {/* Phase 1 — Generating */}
+        {/* Draft / failed project — show retry card */}
+        {isDraft && (
+          <div className="space-y-6">
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">Resume Project</h1>
+              <p className="text-gray-400 text-sm mt-1">This project hasn't been fully planned yet. Generate the plan below.</p>
+            </div>
+
+            <div className="rounded-2xl border border-gray-800 bg-gray-900 p-6 space-y-4">
+              <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Your Idea</p>
+              <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{project.raw_input}</p>
+            </div>
+
+            {displayError && (
+              <div className="rounded-xl border border-red-800 bg-red-950/50 px-4 py-3 text-sm text-red-300">
+                {displayError}
+              </div>
+            )}
+
+            <button
+              onClick={handleRetry}
+              className="w-full py-3 rounded-xl font-semibold text-white bg-blue-600 hover:bg-blue-500 transition-colors"
+            >
+              Generate Plan →
+            </button>
+          </div>
+        )}
+
+        {/* Generating — stream is active */}
         {isGenerating && (
           <div className="rounded-2xl border border-gray-800 bg-gray-900 p-16 text-center space-y-8">
             <div className="flex justify-center">
@@ -205,7 +288,55 @@ export default function ProjectDetail() {
           </div>
         )}
 
-        {/* Phase 2 — Reviewing (edge case: user navigated here before approving) */}
+        {/* Stream error */}
+        {streamActive && displayError && (
+          <div className="space-y-4">
+            <div className="rounded-xl border border-red-800 bg-red-950/50 px-4 py-3 text-sm text-red-300">
+              {displayError}
+            </div>
+            <button
+              onClick={() => { setStreamActive(false); setRetryError(null); }}
+              className="text-sm text-gray-400 hover:text-gray-200 transition-colors"
+            >
+              ← Try again
+            </button>
+          </div>
+        )}
+
+        {/* Plan ready to save — from live stream reaching checkpoint_2 */}
+        {planData && (
+          <div className="rounded-2xl border border-amber-900/40 bg-amber-950/20 px-8 py-7 flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              <div className="h-2.5 w-2.5 rounded-full bg-amber-400 animate-pulse flex-shrink-0" />
+              <p className="text-base font-semibold text-white">Your plan is ready to save</p>
+            </div>
+            <button
+              onClick={handleRejectPlan}
+              className="text-sm text-gray-500 border border-gray-700 px-4 py-2 rounded-lg hover:bg-gray-800/40 transition-colors"
+            >
+              Discard
+            </button>
+            <button
+              onClick={handleApprovePlan}
+              disabled={saving}
+              className="flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              {saving ? (
+                <>
+                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                  </svg>
+                  Saving…
+                </>
+              ) : (
+                "Save Plan & Continue →"
+              )}
+            </button>
+          </div>
+        )}
+
+        {/* Reviewing — user navigated here before approving from NewProject */}
         {isReviewing && hasPlan && (
           <div className="space-y-4">
             <div className="flex items-center gap-3">
@@ -254,7 +385,7 @@ export default function ProjectDetail() {
           </div>
         )}
 
-        {/* Phase 3 — Complete: show plan + download deliverables */}
+        {/* Complete — show plan + download deliverables */}
         {isComplete && hasPlan && (
           <div className="space-y-4">
             <div className="flex items-center gap-3">
@@ -278,7 +409,6 @@ export default function ProjectDetail() {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Planning Report */}
                 <button
                   onClick={handleGenerateReport}
                   disabled={generatingReport || generatingPrototype}
@@ -304,7 +434,6 @@ export default function ProjectDetail() {
                   </p>
                 </button>
 
-                {/* App Prototype */}
                 <button
                   onClick={handleGeneratePrototype}
                   disabled={generatingPrototype || generatingReport}
@@ -332,6 +461,14 @@ export default function ProjectDetail() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Checkpoint 1 modal */}
+        {checkpoint && (
+          <CheckpointModal
+            checkpoint={checkpoint as any}
+            onDecision={handleCheckpoint1Decision}
+          />
         )}
       </div>
     </div>
