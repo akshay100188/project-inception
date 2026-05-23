@@ -38,12 +38,14 @@ export default function NewProject() {
   const [stageIdx, setStageIdx] = useState(0);
   const [saving, setSaving] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { checkpoint, planData, isDone, error, startStream, clearCheckpoint } =
     useAgentStream();
 
-  const isGenerating = submitted && !planData && !isDone && !error;
+  const displayError = error ?? submitError;
+  const isGenerating = submitted && !planData && !isDone && !displayError;
 
   // Cycle through stage labels while loading
   useEffect(() => {
@@ -54,10 +56,10 @@ export default function NewProject() {
 
   // Navigate only on clean completion — stay on page if there was an error
   useEffect(() => {
-    if (isDone && projectId && !error) {
+    if (isDone && projectId && !displayError) {
       navigate(`/projects/${projectId}`);
     }
-  }, [isDone, projectId, navigate, error]);
+  }, [isDone, projectId, navigate, displayError]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -65,16 +67,23 @@ export default function NewProject() {
 
     setSubmitted(true);
 
-    const authHeader = await getAuthHeader();
-    const res = await fetch(`${API_BASE}/api/projects/`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: authHeader },
-      body: JSON.stringify({ raw_input: rawInput }),
-    });
-    const project = await res.json();
-    setProjectId(project.id);
-
-    await startStream(project.id, rawInput);
+    try {
+      const authHeader = await getAuthHeader();
+      const res = await fetch(`${API_BASE}/api/projects/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: authHeader },
+        body: JSON.stringify({ raw_input: rawInput }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.detail ?? `Server error ${res.status}`);
+      }
+      const project = await res.json();
+      setProjectId(project.id);
+      await startStream(project.id, rawInput);
+    } catch (err: any) {
+      setSubmitError(err.message ?? "Something went wrong. Please try again.");
+    }
   }
 
   async function postCheckpoint(checkpointName: string, action: string, edited?: object) {
@@ -282,9 +291,9 @@ export default function NewProject() {
         )}
 
         {/* Error */}
-        {error && (
+        {displayError && (
           <div className="rounded-xl border border-red-800 bg-red-950/50 px-4 py-3 text-sm text-red-300">
-            {error}
+            {displayError}
           </div>
         )}
 
