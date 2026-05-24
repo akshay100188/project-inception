@@ -237,7 +237,10 @@ async def generate_project_report(project_id: str, authorization: str = Header(.
     Generate a full professional planning document using Claude and persist it.
     Returns the HTML directly so the caller can open it in a new tab and print to PDF.
     """
-    from agents.report_agent import generate_report
+    if settings.demo_mode:
+        from agents.report_agent import generate_report
+    else:
+        from report.template_report import generate_report
 
     user_id = _get_user(authorization)
 

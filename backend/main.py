@@ -12,10 +12,16 @@ from api import stream, projects, admin, upload
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: verify config is sane
-    assert settings.anthropic_api_key, "ANTHROPIC_API_KEY not set"
-    assert settings.openai_api_key, "OPENAI_API_KEY not set"
     assert settings.supabase_url.startswith("https://"), "SUPABASE_URL must be a REST URL"
+    if settings.demo_mode:
+        assert settings.anthropic_api_key, (
+            "DEMO_MODE=true requires ANTHROPIC_API_KEY to be set. "
+            "Set DEMO_MODE=false to run without API keys."
+        )
+        assert settings.openai_api_key, (
+            "DEMO_MODE=true requires OPENAI_API_KEY to be set. "
+            "Set DEMO_MODE=false to run without API keys."
+        )
     yield
 
 

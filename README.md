@@ -1,8 +1,10 @@
 # Project Inception
 
-**Turn a rough idea into a complete, reviewer-approved software specification — powered by Claude and LangGraph.**
+**Turn a rough idea into a complete, reviewer-approved software specification — no AI credits required.**
 
-Describe your product idea in plain English. Five AI agents extract requirements, design system architecture, select a technology stack, and estimate timeline and cost. Two human-in-the-loop checkpoints let you review and edit before anything is saved. The final output is a structured plan you can download as a 19-section HTML report or a 5-screen UI wireframe.
+Describe your product idea in plain English. Five agents extract requirements, design system architecture, select a technology stack, and estimate timeline and cost. Two human-in-the-loop checkpoints let you review and edit before anything is saved. The final output is a structured plan you can download as a 19-section HTML report.
+
+> **Default mode uses zero Anthropic or OpenAI credits.** Architecture, tech stack, estimation, and report generation are all rule-based, grounded in 81 real-world open-source projects. An optional `DEMO_MODE=true` flag switches to Claude-powered agents if you want to use your own API keys.
 
 ---
 
@@ -13,12 +15,12 @@ Your Idea (text or uploaded doc)
         │
         ▼
 ┌─────────────────────┐
-│  Requirement Agent  │  Extracts structured requirements from raw input + RAG corpus
+│  Requirement Agent  │  Extracts structured requirements (Claude)
 └──────────┬──────────┘
            │
            ▼
 ┌─────────────────────┐
-│ Clarification Agent │  Generates targeted questions about gaps and ambiguities
+│ Clarification Agent │  Generates targeted questions about gaps (Claude)
 └──────────┬──────────┘
            │
            ▼
@@ -26,14 +28,13 @@ Your Idea (text or uploaded doc)
    │ Checkpoint 1  │  ← You review & approve (or edit) requirements
    └───────┬───────┘
            │
-     ┌─────┴──────────────────────────────────┐
-     ▼                                        ▼
-┌──────────────────┐               ┌──────────────────────┐
-│ Architecture     │               │  Tech Stack Selector │
-│ Agent            │               │  Agent               │
-└──────────┬───────┘               └──────────┬───────────┘
-           │                                  │
-           └──────────────┬───────────────────┘
+     ┌─────┴─────────────────────────────────┐
+     ▼                                       ▼
+┌──────────────────┐              ┌──────────────────────┐
+│ Architecture     │              │  Tech Stack Selector │
+│ Agent            │              │  Agent               │
+└──────────┬───────┘              └──────────┬───────────┘
+           └──────────────┬──────────────────┘
                           ▼
                ┌────────────────────┐
                │  Estimation Agent  │  Timeline phases + budget ranges
@@ -47,13 +48,22 @@ Your Idea (text or uploaded doc)
                          ▼
               Plan saved to Supabase
                          │
-              ┌──────────┴──────────┐
-              ▼                     ▼
-      Download Report         Download Prototype
-   (19-section HTML)        (5-screen wireframe)
+                         ▼
+                  Download Report
+               (19-section HTML)
 ```
 
-Each Phase 2 agent queries a **pgvector RAG corpus** of real-world open-source projects before calling Claude, so recommendations are grounded in concrete examples rather than generic advice.
+### Two modes, one codebase
+
+| | Default (`DEMO_MODE=false`) | Demo (`DEMO_MODE=true`) |
+|---|---|---|
+| Architecture, tech stack, estimation | Rule-based — matched against 81 real projects | Claude Sonnet |
+| Report generation | HTML template — instant, zero cost | Claude Sonnet (4 parallel calls) |
+| Requirement extraction | Claude (small call, ~$0.01) | Claude |
+| Anthropic API key needed | **No** | Yes |
+| OpenAI API key needed | **No** | Yes |
+
+> **Important:** `DEMO_MODE` is a server-side environment variable. It cannot be changed by API requests. If you deploy with `DEMO_MODE=false` (the default), no user action can ever trigger Claude API calls or consume your credits.
 
 ---
 
@@ -63,26 +73,23 @@ Each Phase 2 agent queries a **pgvector RAG corpus** of real-world open-source p
 |---|---|
 | Frontend | React + Vite + TypeScript + Tailwind CSS → **Vercel** |
 | Backend | FastAPI + LangGraph → **Railway** (Docker) |
-| AI | Claude Sonnet (agents) · Claude Sonnet (report & prototype generation) |
-| Embeddings | OpenAI `text-embedding-3-small` (RAG corpus only) |
+| AI (optional) | Claude Sonnet — requirement extraction + clarification only in default mode |
 | Database | Supabase (PostgreSQL + pgvector + Auth) |
 | Streaming | Server-Sent Events (SSE) with asyncio-based human-in-the-loop pauses |
+| Rule engine | 81 real-world open-source project profiles in `backend/data/project_examples/` |
 
 ---
 
 ## Prerequisites
 
-Before you start you need accounts and API keys from four services:
-
 | Service | What you need | Free tier? |
 |---|---|---|
-| [Anthropic](https://console.anthropic.com) | API key — all Claude agent calls | Pay-per-use |
-| [OpenAI](https://platform.openai.com) | API key — RAG embedding only | Pay-per-use |
-| [Supabase](https://supabase.com) | Project URL + anon key + service role key | Yes (free tier works) |
+| [Supabase](https://supabase.com) | Project URL + anon key + service role key | Yes |
 | [Railway](https://railway.app) | Account for backend deploy | $5/mo hobby plan |
-| [Vercel](https://vercel.com) | Account for frontend deploy | Yes (free tier works) |
+| [Vercel](https://vercel.com) | Account for frontend deploy | Yes |
+| [Anthropic](https://console.anthropic.com) | API key — **only needed for requirement extraction** | Pay-per-use |
 
-**Runtime costs:** A single full plan generation (all 5 agents) costs approximately $0.05–0.15 in Claude API credits. Report and prototype generation add $0.10–0.25 each.
+> **If you only want to test the full AI experience locally**, you also need an Anthropic key and set `DEMO_MODE=true` in your `.env`.
 
 ---
 
@@ -111,29 +118,26 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Edit `.env` and fill in all values (see [Environment Variables](#environment-variables) below):
+Edit `.env` — the minimum required fields are:
+
+```env
+SUPABASE_URL=https://your-project-ref.supabase.co
+SUPABASE_SERVICE_KEY=eyJ...
+CORS_ORIGINS=http://localhost:5173
+DEMO_MODE=false
+
+# Only needed for requirement/clarification agents (very small calls):
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+Then start the server:
 
 ```bash
 uvicorn main:app --reload
 # → API running at http://localhost:8000
 ```
 
-### 4. Seed the RAG corpus (one-time setup)
-
-The RAG corpus gives agents real-world reference examples. This step calls the OpenAI embeddings API and writes ~100 documents to Supabase.
-
-```bash
-# With the backend venv still active:
-python -m rag.seed
-# → Seeding architecture patterns...
-# → Seeding tech stack patterns...
-# → Seeding estimation patterns...
-# → Done. 96 documents embedded.
-```
-
-> **Skipping RAG:** If you don't want to seed the corpus, agents will still run — they'll just produce more generic recommendations without real-world grounding.
-
-### 5. Configure and start the frontend
+### 4. Configure and start the frontend
 
 ```bash
 cd ../frontend
@@ -141,7 +145,13 @@ npm install
 cp .env.example .env.local
 ```
 
-Edit `.env.local` with your Supabase URL, anon key, and backend URL, then:
+Edit `.env.local`:
+
+```env
+VITE_SUPABASE_URL=https://your-project-ref.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJ...
+VITE_API_URL=http://localhost:8000
+```
 
 ```bash
 npm run dev
@@ -158,20 +168,21 @@ Open [http://localhost:5173](http://localhost:5173), sign in with a magic link, 
 
 | Variable | Required | Description |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | **Yes** | Your Anthropic API key (`sk-ant-...`). Get it at [console.anthropic.com](https://console.anthropic.com/settings/keys). All agent calls use this key. |
-| `OPENAI_API_KEY` | **Yes** | Your OpenAI API key (`sk-proj-...`). Used only for RAG corpus embeddings (`text-embedding-3-small`). |
-| `SUPABASE_URL` | **Yes** | Your Supabase project REST URL (`https://xxxx.supabase.co`). Found in Project Settings → API. |
-| `SUPABASE_SERVICE_KEY` | **Yes** | Your Supabase **service role** key (not the anon key). Keep this secret — it bypasses Row Level Security. |
-| `CORS_ORIGINS` | **Yes** | Comma-separated list of allowed origins. For local dev: `http://localhost:5173`. For production add your Vercel URL. |
-| `GITHUB_TOKEN` | No | GitHub personal access token. Raises the GitHub API rate limit from 60 to 5000 requests/hour (used during RAG seeding only). |
+| `SUPABASE_URL` | **Yes** | Your Supabase project REST URL (`https://xxxx.supabase.co`). |
+| `SUPABASE_SERVICE_KEY` | **Yes** | Your Supabase **service role** key. Keep this server-side only. |
+| `CORS_ORIGINS` | **Yes** | Comma-separated allowed origins. Local dev: `http://localhost:5173`. |
+| `DEMO_MODE` | No | `false` (default) — rule-based, no credits. `true` — Claude-powered, requires API keys below. |
+| `ANTHROPIC_API_KEY` | Only if `DEMO_MODE=true` | Your Anthropic API key. The server rejects `DEMO_MODE=true` without it. |
+| `OPENAI_API_KEY` | Only if `DEMO_MODE=true` | Your OpenAI key for RAG corpus embeddings. |
+| `GITHUB_TOKEN` | No | Raises GitHub API rate limit from 60 → 5000 req/hr during RAG seeding. |
 
 ### Frontend — `frontend/.env.local`
 
 | Variable | Required | Description |
 |---|---|---|
 | `VITE_SUPABASE_URL` | **Yes** | Same Supabase project URL as above. |
-| `VITE_SUPABASE_ANON_KEY` | **Yes** | Your Supabase **anon** (public) key. Safe to expose in browser code — Row Level Security enforces access. |
-| `VITE_API_URL` | **Yes** | URL of your backend. For local dev: `http://localhost:8000`. For production: your Railway URL. |
+| `VITE_SUPABASE_ANON_KEY` | **Yes** | Your Supabase **anon** key. Safe to expose in browser. |
+| `VITE_API_URL` | **Yes** | Backend URL. Local dev: `http://localhost:8000`. Production: your Railway URL. |
 
 ---
 
@@ -186,31 +197,26 @@ git push -u origin main
 
 ### Step 2 — Deploy backend to Railway
 
-1. Go to [railway.app](https://railway.app) and click **New Project → Deploy from GitHub repo**
-2. Select this repository and set the **Root Directory** to `backend`
-3. Railway will detect the `Dockerfile` automatically
-4. In the Railway dashboard, go to your service → **Variables** and add:
+1. Go to [railway.app](https://railway.app) → **New Project → Deploy from GitHub repo**
+2. Select this repository, set **Root Directory** to `backend`
+3. Railway detects the `Dockerfile` automatically
+4. In the Railway dashboard → service → **Variables**, add:
 
    | Variable | Value |
    |---|---|
-   | `ANTHROPIC_API_KEY` | `sk-ant-...` |
-   | `OPENAI_API_KEY` | `sk-proj-...` |
    | `SUPABASE_URL` | `https://xxxx.supabase.co` |
    | `SUPABASE_SERVICE_KEY` | `eyJ...` (service role key) |
    | `CORS_ORIGINS` | `https://your-app.vercel.app` |
+   | `DEMO_MODE` | `false` |
+   | `ANTHROPIC_API_KEY` | `sk-ant-...` (needed for requirement extraction) |
 
-5. After deploy, copy the Railway **Public Domain** URL (e.g. `https://inception-backend.railway.app`)
-6. Run the RAG seed once via Railway's terminal: **Service → Shell**:
-   ```bash
-   python -m rag.seed
-   ```
+5. Copy the Railway **Public Domain** URL after deploy
 
 ### Step 3 — Deploy frontend to Vercel
 
-1. Go to [vercel.com](https://vercel.com) and click **Add New → Project**
-2. Import your GitHub repository
-3. Set **Root Directory** to `frontend`
-4. Under **Environment Variables**, add:
+1. Go to [vercel.com](https://vercel.com) → **Add New → Project**
+2. Import your GitHub repository, set **Root Directory** to `frontend`
+3. Add environment variables:
 
    | Variable | Value |
    |---|---|
@@ -218,7 +224,7 @@ git push -u origin main
    | `VITE_SUPABASE_ANON_KEY` | `eyJ...` (anon key) |
    | `VITE_API_URL` | Your Railway backend URL |
 
-5. Click **Deploy** — Vercel auto-detects Vite
+4. Click **Deploy**
 
 ### Step 4 — Configure Supabase Auth for production
 
@@ -227,17 +233,9 @@ In Supabase dashboard → **Authentication → URL Configuration**:
 - **Site URL**: `https://your-app.vercel.app`
 - **Redirect URLs**: `https://your-app.vercel.app/**`
 
-This is required for magic link emails to redirect users back to your app.
-
 ### Step 5 — Update CORS
 
-Go back to Railway → your backend service → Variables and update `CORS_ORIGINS` to include your Vercel URL:
-
-```
-CORS_ORIGINS=https://your-app.vercel.app
-```
-
-Railway redeploys automatically.
+Update `CORS_ORIGINS` in Railway to include your Vercel URL. Railway redeploys automatically.
 
 ---
 
@@ -247,44 +245,53 @@ Railway redeploys automatically.
 project-inception/
 ├── backend/
 │   ├── agents/
-│   │   ├── requirement_agent.py      # Extracts structured requirements from raw input
-│   │   ├── clarification_agent.py    # Generates clarifying questions
-│   │   ├── architecture_agent.py     # Designs system architecture
-│   │   ├── techstack_agent.py        # Selects technology stack
-│   │   ├── estimation_agent.py       # Estimates timeline and budget
-│   │   ├── report_agent.py           # Generates 19-section HTML planning report
-│   │   └── prototype_agent.py        # Generates 5-screen HTML UI wireframe
+│   │   ├── requirement_agent.py      # Extracts requirements from raw input (Claude)
+│   │   ├── clarification_agent.py    # Generates clarifying questions (Claude)
+│   │   ├── architecture_agent.py     # Architecture design — Claude version (DEMO_MODE=true)
+│   │   ├── techstack_agent.py        # Tech stack selection — Claude version (DEMO_MODE=true)
+│   │   ├── estimation_agent.py       # Timeline/budget estimation — Claude version (DEMO_MODE=true)
+│   │   ├── report_agent.py           # 19-section HTML report — Claude version (DEMO_MODE=true)
+│   │   ├── prototype_agent.py        # 5-screen wireframe — Claude version (DEMO_MODE=true)
+│   │   └── rules/
+│   │       ├── lookup.py             # Domain maps, stack tables, estimation logic (81 projects)
+│   │       ├── architecture_rules.py # Rule-based architecture agent (default)
+│   │       ├── techstack_rules.py    # Rule-based tech stack agent (default)
+│   │       └── estimation_rules.py   # Rule-based estimation agent (default)
+│   ├── report/
+│   │   └── template_report.py        # 19-section HTML report — template version (default)
 │   ├── graph/
-│   │   ├── planning_graph.py         # LangGraph state machine wiring all agents
+│   │   ├── planning_graph.py         # LangGraph state machine — routes to rules or Claude
 │   │   └── state.py                  # PlanningState TypedDict
 │   ├── rag/
-│   │   ├── corpus.py                 # OpenAI embed + pgvector semantic search
-│   │   └── seed.py                   # One-time corpus seeder (~96 documents)
+│   │   ├── corpus.py                 # OpenAI embed + pgvector search (DEMO_MODE=true)
+│   │   └── seed.py                   # One-time corpus seeder
+│   ├── data/
+│   │   └── project_examples/         # 81 real-world project profiles (JSON)
 │   ├── api/
 │   │   ├── stream.py                 # SSE /api/stream/{project_id} endpoint
-│   │   ├── projects.py               # Project CRUD + /checkpoint resolver
+│   │   ├── projects.py               # Project CRUD + checkpoint resolver + report endpoint
 │   │   ├── upload.py                 # PDF/DOCX/TXT document parser
 │   │   └── admin.py                  # Internal admin endpoints
-│   ├── checkpoint_registry.py        # asyncio.Event-based human-in-the-loop pauses
-│   ├── config.py                     # Pydantic settings (reads from .env)
-│   ├── main.py                       # FastAPI app + CORS + lifespan
+│   ├── checkpoint_registry.py        # asyncio.Event human-in-the-loop pauses
+│   ├── config.py                     # Pydantic settings (reads .env)
+│   ├── main.py                       # FastAPI app entry point
 │   ├── Dockerfile
 │   └── requirements.txt
 ├── frontend/
 │   └── src/
 │       ├── components/
-│       │   ├── Checkpoint/           # Requirements review modal (Checkpoint 1)
+│       │   ├── Checkpoint/           # Requirements review modal
 │       │   ├── PlanOutput/           # Architecture + tech stack + estimation cards
-│       │   └── Nav/                  # Top navigation bar
+│       │   └── Nav/
 │       ├── hooks/
-│       │   └── useAgentStream.ts     # SSE consumer — processes events into React state
+│       │   └── useAgentStream.ts     # SSE consumer
 │       ├── pages/
-│       │   ├── Login.tsx             # Magic link sign-in
-│       │   ├── Dashboard.tsx         # Project list
-│       │   ├── NewProject.tsx        # Idea input → streaming → checkpoint flow
-│       │   └── ProjectDetail.tsx     # Saved plan view + report/prototype download
-│       ├── lib/supabase.ts           # Supabase client + auth helper
-│       └── App.tsx                   # Routes
+│       │   ├── Login.tsx
+│       │   ├── Dashboard.tsx
+│       │   ├── NewProject.tsx
+│       │   └── ProjectDetail.tsx
+│       ├── lib/supabase.ts
+│       └── App.tsx
 ├── supabase/
 │   └── schema.sql                    # incept_projects + rag_corpus tables + pgvector
 └── README.md
@@ -292,17 +299,12 @@ project-inception/
 
 ---
 
-## Using Your Own API Keys
+## How Credits Are Protected
 
-This project is designed so that anyone can self-host it with their own credentials. **No shared keys, no usage caps, no SaaS signup required.** Here is exactly what each key does:
-
-**`ANTHROPIC_API_KEY`** — the only key that matters for the core feature. Every agent call (requirement extraction, architecture design, tech stack selection, estimation, report generation, prototype generation) goes through your key. Plan for roughly $0.05–0.50 per project depending on complexity and which outputs you generate.
-
-**`OPENAI_API_KEY`** — used exclusively for the RAG corpus feature: embedding reference documents at seed time and embedding queries at runtime to find relevant examples. If you skip seeding the corpus, you can stub this variable with any non-empty string and the agents will still run (RAG lookups fail silently and return empty context).
-
-**`SUPABASE_SERVICE_KEY`** — stays on the server only (never sent to the browser). Used by the backend to write plan data and update project status. Row Level Security on Supabase ensures users can only access their own projects.
-
-**`VITE_SUPABASE_ANON_KEY`** — the browser-facing key. Safe to ship in frontend code because Supabase RLS enforces row-level access.
+- **`DEMO_MODE=false` is the default.** Architecture, tech stack, estimation, and the full HTML report are generated without any API calls.
+- **`DEMO_MODE` is a server-side variable.** No HTTP request from a user can change it — it is read once at server startup from the environment.
+- **API keys are never committed.** `.env` is in `.gitignore`. The `.env.example` file contains only placeholders.
+- **Server refuses to start misconfigured.** If `DEMO_MODE=true` is set without the required API keys, the server exits immediately on startup with a clear error message rather than silently failing mid-request.
 
 ---
 
