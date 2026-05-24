@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { getAuthHeader } from "../lib/supabase";
 import { useAgentStream } from "../hooks/useAgentStream";
+import { track } from "../lib/analytics";
 import { CheckpointModal } from "../components/Checkpoint/CheckpointModal";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
@@ -66,6 +67,10 @@ export default function NewProject() {
     if (!rawInput.trim()) return;
 
     setSubmitted(true);
+    track("project_started", {
+      input_length: rawInput.trim().length,
+      has_upload: !!uploadedFilename,
+    });
 
     try {
       const authHeader = await getAuthHeader();
@@ -98,12 +103,14 @@ export default function NewProject() {
 
   async function handleCheckpoint1Decision(action: "approve" | "edit" | "reject", edited?: object) {
     clearCheckpoint();
+    track(`checkpoint_1_${action}`, { was_edited: !!edited });
     await postCheckpoint("checkpoint_1", action, edited);
     if (action === "reject") navigate("/");
   }
 
   async function handleApprovePlan() {
     setSaving(true);
+    track("plan_saved");
     try {
       await postCheckpoint("checkpoint_2", "approve");
     } finally {
@@ -112,6 +119,7 @@ export default function NewProject() {
   }
 
   async function handleRejectPlan() {
+    track("plan_rejected");
     await postCheckpoint("checkpoint_2", "reject");
     navigate("/");
   }

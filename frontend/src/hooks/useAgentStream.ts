@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { getAuthHeader } from "../lib/supabase";
+import { track } from "../lib/analytics";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
@@ -109,14 +110,26 @@ export function useAgentStream() {
           ...prev,
           [agentName]: { ...prev[agentName], status: "done" },
         }));
+        track("flow_stage_complete", { stage: agentName });
         break;
 
       case "checkpoint": {
         const data = { ...(evt.data as object), _agent: agentName } as CheckpointData;
         if (agentName === "checkpoint_2") {
           setPlanData(data);
+          const req = data.requirements as Record<string, any> | undefined;
+          const est = data.estimation as Record<string, any> | undefined;
+          const arch = data.architecture as Record<string, any> | undefined;
+          track("plan_ready", {
+            domain: req?.domain ?? "",
+            scale: req?.scale ?? "",
+            feature_count: (req?.core_features as unknown[])?.length ?? 0,
+            mvp_weeks: est?.mvp_weeks ?? 0,
+            architecture_pattern: arch?.pattern ?? "",
+          });
         } else {
           setCheckpoint(data);
+          track("checkpoint_1_shown");
         }
         break;
       }
@@ -127,6 +140,7 @@ export function useAgentStream() {
           ...prev,
           [agentName]: { ...prev[agentName], status: "error" },
         }));
+        track("flow_error", { stage: agentName });
         break;
 
       case "done":

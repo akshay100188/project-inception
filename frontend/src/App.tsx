@@ -6,13 +6,26 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import NewProject from "./pages/NewProject";
 import ProjectDetail from "./pages/ProjectDetail";
+import { identifyUser, resetUser } from "./lib/analytics";
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<any>(undefined);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      if (data.session?.user) {
+        identifyUser(data.session.user.id, { email: data.session.user.email });
+      }
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
+      setSession(s);
+      if (s?.user) {
+        identifyUser(s.user.id, { email: s.user.email });
+      } else {
+        resetUser();
+      }
+    });
     return () => sub.subscription.unsubscribe();
   }, []);
 

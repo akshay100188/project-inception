@@ -299,6 +299,50 @@ project-inception/
 
 ---
 
+## Analytics (PostHog)
+
+The app ships with built-in [PostHog](https://posthog.com) integration to track usage — completely optional and disabled unless you set `VITE_POSTHOG_KEY`.
+
+### What's tracked
+
+| Event | Trigger |
+|---|---|
+| `$pageview` | Every page navigation (auto) |
+| `user_identified` | On login — links events to a user |
+| `project_started` | User submits an idea (`input_length`, `has_upload`) |
+| `flow_stage_complete` | Each agent finishes (`stage`: requirement / clarification / architecture / techstack / estimation) |
+| `checkpoint_1_shown` | Requirements review modal opens |
+| `checkpoint_1_approve/edit/reject` | User acts on requirements (`was_edited`) |
+| `plan_ready` | Plan reaches checkpoint 2 (`domain`, `scale`, `feature_count`, `mvp_weeks`, `architecture_pattern`) |
+| `plan_saved` / `plan_rejected` | User saves or discards the plan |
+| `report_downloaded` | User downloads the HTML report |
+| `prototype_downloaded` | User downloads the wireframe |
+| `flow_error` | An agent errors mid-pipeline (`stage`) |
+
+### Setup
+
+1. Create a free account at [posthog.com](https://posthog.com)
+2. Go to **Project Settings → Project API Key** and copy the key
+3. Add to `frontend/.env.local`:
+
+```env
+VITE_POSTHOG_KEY=phc_...
+VITE_POSTHOG_HOST=https://us.i.posthog.com
+```
+
+4. For production (Vercel), add the same variables in the Vercel dashboard
+
+No backend changes required. If `VITE_POSTHOG_KEY` is not set, analytics silently do nothing.
+
+### Useful PostHog views once data is flowing
+
+- **Funnels** → create a funnel: `project_started` → `checkpoint_1_shown` → `plan_ready` → `plan_saved` → `report_downloaded` to see drop-off at each stage
+- **Insights → Trends** → plot `project_started` over time to see daily active usage
+- **Insights → Breakdown** → break `plan_ready` by `domain` to see which project types are most popular
+- **Session Replay** → watch exactly how users navigate and where they get stuck
+
+---
+
 ## How Credits Are Protected
 
 - **`DEMO_MODE=false` is the default.** Architecture, tech stack, estimation, and the full HTML report are generated without any API calls.

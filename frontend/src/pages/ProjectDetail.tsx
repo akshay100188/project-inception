@@ -4,6 +4,7 @@ import { getAuthHeader } from "../lib/supabase";
 import { PlanOutput } from "../components/PlanOutput/PlanOutput";
 import { CheckpointModal } from "../components/Checkpoint/CheckpointModal";
 import { useAgentStream } from "../hooks/useAgentStream";
+import { track } from "../lib/analytics";
 
 type ProjectRecord = {
   id: string;
@@ -174,11 +175,15 @@ export default function ProjectDetail() {
     }
   }
 
-  const handleGenerateReport = () =>
+  const handleGenerateReport = () => {
+    track("report_downloaded", { project_id: id });
     downloadHtml("report", "project-plan-report.html", "Report generation", setGeneratingReport);
+  };
 
-  const handleGeneratePrototype = () =>
+  const handleGeneratePrototype = () => {
+    track("prototype_downloaded", { project_id: id });
     downloadHtml("prototype", "app-prototype.html", "Prototype generation", setGeneratingPrototype);
+  };
 
   if (loading) {
     return (
