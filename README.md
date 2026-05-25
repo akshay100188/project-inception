@@ -56,13 +56,15 @@ Your Idea (text or uploaded doc)
 
 ### Two modes, one codebase
 
+Both modes use the **same 81 real-world project examples** as grounding context. The difference is what happens with that context.
+
 | | Default (`DEMO_MODE=false`) | Demo (`DEMO_MODE=true`) |
 |---|---|---|
-| Requirement extraction | Rule-based — keyword + heuristic parsing | Claude Sonnet |
-| Clarification questions | Rule-based — 4 domain-specific fixed questions | Claude Sonnet |
-| Architecture design | Rule-based — matched against 81 real projects | Claude Sonnet |
-| Tech stack selection | Rule-based — curated domain tables | Claude Sonnet |
-| Timeline & cost estimation | Rule-based — scale + feature count heuristics | Claude Sonnet |
+| Requirement extraction | Keyword + heuristic parsing; top 3 similar projects validate domain/scale | Claude Sonnet grounded by top 3 similar project examples |
+| Clarification questions | Feature-gap questions from matched project lessons + domain base questions | Claude Sonnet grounded by top 3 similar project examples |
+| Architecture design | Text similarity → pattern vote from matched projects + `reference_projects` in output | Claude Sonnet grounded by top 4 similar project examples + curated architecture docs |
+| Tech stack selection | Curated domain stack + `reference_projects` + `real_world_libraries` from matched projects | Claude Sonnet grounded by top 4 similar project examples + curated techstack docs |
+| Timeline & cost estimation | Scale + feature count heuristics + `reference_projects` from matched projects | Claude Sonnet grounded by top 4 similar project examples + curated estimation benchmarks |
 | HTML planning report | Template — 19-section instant generation | Claude Sonnet (4 parallel calls) |
 | Interactive wireframe | Template — 5-screen domain-aware prototype | Claude Sonnet (3 parallel calls) |
 | Anthropic API key needed | **No** | Yes |
@@ -268,20 +270,20 @@ Update `CORS_ORIGINS` in Railway to include your Vercel URL. Railway redeploys a
 project-inception/
 ├── backend/
 │   ├── agents/
-│   │   ├── requirement_agent.py      # Requirement extraction — Claude version (DEMO_MODE=true)
-│   │   ├── clarification_agent.py    # Clarifying questions — Claude version (DEMO_MODE=true)
-│   │   ├── architecture_agent.py     # Architecture design — Claude version (DEMO_MODE=true)
-│   │   ├── techstack_agent.py        # Tech stack selection — Claude version (DEMO_MODE=true)
-│   │   ├── estimation_agent.py       # Timeline/budget estimation — Claude version (DEMO_MODE=true)
+│   │   ├── requirement_agent.py      # Claude + top 3 similar project examples as grounding (DEMO_MODE=true)
+│   │   ├── clarification_agent.py    # Claude + top 3 similar project examples for gap analysis (DEMO_MODE=true)
+│   │   ├── architecture_agent.py     # Claude + top 4 similar projects + curated arch docs (DEMO_MODE=true)
+│   │   ├── techstack_agent.py        # Claude + top 4 similar projects + curated stack docs (DEMO_MODE=true)
+│   │   ├── estimation_agent.py       # Claude + top 4 similar projects + estimation benchmarks (DEMO_MODE=true)
 │   │   ├── report_agent.py           # 19-section HTML report — Claude version (DEMO_MODE=true)
 │   │   ├── prototype_agent.py        # 5-screen wireframe — Claude version (DEMO_MODE=true)
 │   │   └── rules/
-│   │       ├── lookup.py             # Shared domain maps, stack tables, estimation logic (81 projects)
+│   │       ├── lookup.py             # Text similarity search over 81 projects + domain/stack/estimation tables
 │   │       ├── requirement_rules.py  # Rule-based requirement extraction (default)
-│   │       ├── clarification_rules.py# Rule-based clarification questions (default)
-│   │       ├── architecture_rules.py # Rule-based architecture agent (default)
-│   │       ├── techstack_rules.py    # Rule-based tech stack agent (default)
-│   │       └── estimation_rules.py   # Rule-based estimation agent (default)
+│   │       ├── clarification_rules.py# Feature-gap + domain clarification questions (default)
+│   │       ├── architecture_rules.py # Text similarity → pattern vote + reference_projects (default)
+│   │       ├── techstack_rules.py    # Curated stack + real_world_libraries from matches (default)
+│   │       └── estimation_rules.py   # Scale heuristics + reference_projects from matches (default)
 │   ├── report/
 │   │   ├── template_report.py        # 19-section HTML report — template version (default)
 │   │   └── template_prototype.py     # 5-screen wireframe — template version (default)
@@ -289,10 +291,13 @@ project-inception/
 │   │   ├── planning_graph.py         # LangGraph state machine — routes to rules or Claude
 │   │   └── state.py                  # PlanningState TypedDict
 │   ├── rag/
-│   │   ├── corpus.py                 # OpenAI embed + pgvector search (DEMO_MODE=true)
-│   │   └── seed.py                   # One-time corpus seeder
+│   │   ├── corpus.py                 # OpenAI embed + pgvector search for curated reference docs
+│   │   └── seed.py                   # Seeds 14 curated architecture/techstack/estimation docs into pgvector
+│   ├── scripts/
+│   │   ├── migrate_examples_to_supabase.py  # One-time: push 81 project embeddings → rag_corpus table
+│   │   └── seed_from_github.py              # Scrapes new project profiles from GitHub
 │   ├── data/
-│   │   └── project_examples/         # 81 real-world project profiles (JSON)
+│   │   └── project_examples/         # 81 real-world project profiles (JSON + pre-computed embeddings)
 │   ├── api/
 │   │   ├── stream.py                 # SSE /api/stream/{project_id} endpoint
 │   │   ├── projects.py               # Project CRUD + checkpoint resolver + report/prototype endpoints
@@ -328,19 +333,37 @@ project-inception/
 
 ---
 
-## How the Rule Engine Works
+## How the 81 Project Examples Are Used
 
-In default mode, every agent is powered by `backend/agents/rules/lookup.py` and a set of 81 real-world open-source project profiles stored in `backend/data/project_examples/`.
+Every project profile in `backend/data/project_examples/` contains: project name, problem statement, target users, core features, integrations, tech stack, architecture pattern, key libraries, design lessons, GitHub star count, and a pre-computed 1536-dim embedding vector.
 
-| Agent | What it does without Claude |
+At runtime, agents call `find_similar_examples_by_text(query, top_k)` in `lookup.py`. This scores every example by **word-overlap similarity** between the query and the example's full content field — no API call, no database, pure Python. For a query like _"healthcare appointment booking for patients and doctors"_, it surfaces OpenEMR and OpenMRS with their actual architecture decisions and design lessons. For _"freelance marketplace for digital assets"_, it surfaces Medusa and Spree.
+
+The matched examples flow into agents in two ways:
+
+**In DEMO_MODE=false (rule-based):**
+
+| Agent | What the 81 projects provide |
 |---|---|
-| **Requirement** | Keyword regex over the free-form idea text → domain, scale, feature list, target users |
-| **Clarification** | Returns 4 pre-written domain-specific questions (ecommerce, edtech, fintech, healthcare, erp, social, productivity, saas) |
-| **Architecture** | Finds the 3 closest project examples by domain + scale → derives pattern and component list |
-| **Tech stack** | Looks up a curated, opinionated stack per domain (e.g. fintech → Next.js + FastAPI + PostgreSQL + Plaid) |
-| **Estimation** | Applies scale-and-feature-count heuristics calibrated against the 81 example projects |
-| **Report** | Fills a 19-section HTML template with the structured plan data |
-| **Prototype** | Renders a 5-screen domain-aware HTML wireframe using hardcoded realistic sample data |
+| **Requirement** | Keyword regex → domain, scale, feature list, target users |
+| **Clarification** | Top 4 similar projects → feature-gap questions (what those projects had that isn't in your requirements) merged with domain base questions |
+| **Architecture** | Top 5 similar projects → pattern vote (most common architecture across matches) + `reference_projects` in the output |
+| **Tech stack** | Curated domain stack + `reference_projects` + `real_world_libraries` aggregated from matched projects |
+| **Estimation** | Scale + feature count heuristics + `reference_projects` from matched projects in the output |
+| **Report** | 19-section HTML template populated with the structured plan |
+| **Prototype** | 5-screen domain-aware wireframe with realistic hardcoded data |
+
+**In DEMO_MODE=true (Claude-powered):**
+
+| Agent | What the 81 projects provide |
+|---|---|
+| **Requirement** | Top 3 similar project profiles prepended as few-shot grounding before Claude extracts requirements |
+| **Clarification** | Top 3 similar project profiles shown to Claude so it identifies feature gaps vs real precedents |
+| **Architecture** | Top 4 similar project profiles + curated architecture reference docs passed to Claude |
+| **Tech stack** | Top 4 similar project profiles + curated techstack reference docs passed to Claude |
+| **Estimation** | Top 4 similar project profiles + curated estimation benchmark docs passed to Claude |
+
+In both modes the examples come from local JSON files — no pgvector query, no API call, no seeding required. They are available from the first request.
 
 ---
 

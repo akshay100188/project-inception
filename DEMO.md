@@ -43,8 +43,8 @@
 ## 4 · Phase 1 streaming — Requirement + Clarification (0:55 – 1:40)
 
 1. Watch the **Requirement Analyst** token stream live
-2. Watch the **Clarification Agent** fire next — four targeted questions appear
-3. Narrate: *"Two Claude agents in sequence — the first produces a structured requirements JSON, the second surfaces the most important open questions for this domain"*
+2. Watch the **Clarification Agent** fire next — targeted questions appear
+3. Narrate: *"Two Claude agents in sequence — each one receives the top 3 most similar real-world projects as grounding context before it calls Claude, so the output is calibrated against actual precedents, not just training data"*
 4. Graph pauses — **Checkpoint 1 modal** appears
 
 ---
@@ -63,7 +63,7 @@
 1. Watch **Architecture Architect** stream (pattern, components, rationale)
 2. Watch **Tech Stack Selector** stream
 3. Watch **Estimation Analyst** stream
-4. Narrate: *"Three Claude agents run in sequence — each one produces structured JSON that feeds the next"*
+4. Narrate: *"Three Claude agents in sequence — each one receives the top 4 most similar real-world projects as grounding context alongside curated reference documents, so recommendations are backed by actual precedents rather than pure model intuition"*
 5. Graph pauses — plan review appears
 
 ---
@@ -106,6 +106,7 @@
 | What to say | What to show |
 |---|---|
 | "Seven agents, two modes — Claude-powered or fully rule-based" | Mention at the start |
+| "Both modes use the same 81 real-world project examples as grounding" | Can mention during Phase 1 or 2 |
 | "Agents run in a LangGraph state machine" | AgentPanel with live tokens |
 | "True human-in-the-loop — server is paused on an asyncio.Event" | Checkpoint modal |
 | "Full plan delivered over a single SSE stream" | Continuous streaming UI |
