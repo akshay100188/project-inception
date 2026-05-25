@@ -10,6 +10,7 @@ import logging
 import anthropic
 from config import settings
 from rag.corpus import search, format_context
+from agents.rules.lookup import find_similar_examples_by_text, format_examples_for_prompt
 from agents.agent_utils import parse_json_response
 
 logger = logging.getLogger(__name__)
@@ -59,17 +60,16 @@ async def run_architecture_agent(state: dict) -> dict:
     })
 
     requirements = state.get("requirements", {})
+    raw_input = state.get("raw_input", "")
     query = (
         f"{requirements.get('domain', '')} {requirements.get('scale', '')} application "
         f"with {', '.join(f['feature'] for f in requirements.get('core_features', []))}"
     )
 
-    # Parallel: real-world project examples + architecture pattern docs
-    example_docs, arch_docs = await asyncio.gather(
-        search(query, category="project_example", top_k=2),
-        search(query, category="architecture", top_k=3),
-    )
-    examples_context = format_context(example_docs)
+    # Local file search (always available) + curated architecture docs from pgvector
+    similar_examples = find_similar_examples_by_text(raw_input or query, top_k=4)
+    examples_context = format_examples_for_prompt(similar_examples)
+    arch_docs = await search(query, category="architecture", top_k=3)
     patterns_context = format_context(arch_docs)
     full_response = ""
 

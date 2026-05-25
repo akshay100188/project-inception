@@ -6,7 +6,7 @@ Uses Claude Sonnet with prompt caching to produce a validated JSON requirements 
 import asyncio
 import anthropic
 from config import settings
-from rag.corpus import search as _corpus_search, format_context as _format_context
+from agents.rules.lookup import find_similar_examples_by_text, format_examples_for_prompt
 from agents.agent_utils import parse_json_response
 
 _client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
@@ -51,16 +51,12 @@ async def run_requirement_agent(state: dict) -> dict:
 
     await queue.put({"event": "agent_start", "agent": "requirement", "data": "Analyzing your project idea..."})
 
-    # Fetch similar real-world projects from Supabase as few-shot grounding.
-    try:
-        similar_projects = await _corpus_search(state["raw_input"], category="project_example", top_k=2)
-    except Exception:
-        similar_projects = []
-
-    blocks = _format_context(similar_projects)
+    # Find similar real-world projects from local files — no pgvector dependency.
+    similar_projects = find_similar_examples_by_text(state["raw_input"], top_k=3)
+    blocks = format_examples_for_prompt(similar_projects)
 
     few_shot_block = ""
-    if similar_projects:
+    if blocks:
         few_shot_block = (
             "\n\nReference projects from similar real-world apps (use to calibrate your output):\n"
             + blocks

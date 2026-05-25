@@ -8,6 +8,7 @@ import asyncio
 import json
 import anthropic
 from config import settings
+from agents.rules.lookup import find_similar_examples_by_text, format_examples_for_prompt
 
 _client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
 
@@ -49,7 +50,17 @@ async def run_clarification_agent(state: dict) -> dict:
     await queue.put({"event": "agent_start", "agent": "clarification", "data": "Identifying gaps in requirements..."})
 
     requirements = state.get("requirements", {})
+    raw_input = state.get("raw_input", "")
     full_response = ""
+
+    # Ground questions in real projects — surface feature gaps the user hasn't mentioned.
+    similar = find_similar_examples_by_text(raw_input or json.dumps(requirements), top_k=3)
+    examples_block = format_examples_for_prompt(similar)
+    examples_section = (
+        f"\nSimilar real-world projects for reference (note which features they included "
+        f"that may be absent from the requirements below):\n{examples_block}\n\n---\n"
+        if examples_block else ""
+    )
 
     async with _client.messages.stream(
         model="claude-haiku-4-5-20251001",   # fast + cheap for short Q generation
@@ -64,7 +75,11 @@ async def run_clarification_agent(state: dict) -> dict:
         messages=[
             {
                 "role": "user",
-                "content": f"Generate clarification questions for this project:\n\n{json.dumps(requirements, indent=2)}",
+                "content": (
+                    f"{examples_section}"
+                    f"Generate clarification questions for this project:\n\n"
+                    f"{json.dumps(requirements, indent=2)}"
+                ),
             }
         ],
     ) as stream:

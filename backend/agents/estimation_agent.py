@@ -10,6 +10,7 @@ import logging
 import anthropic
 from config import settings
 from rag.corpus import search, format_context
+from agents.rules.lookup import find_similar_examples_by_text, format_examples_for_prompt
 from agents.agent_utils import parse_json_response
 
 logger = logging.getLogger(__name__)
@@ -71,17 +72,16 @@ async def run_estimation_agent(state: dict) -> dict:
     architecture = state.get("architecture", {})
     tech_stack = state.get("tech_stack", {})
 
+    raw_input = state.get("raw_input", "")
     query = (
         f"Estimation for {requirements.get('scale', 'MVP')} {requirements.get('domain', '')} project "
         f"with {len(requirements.get('core_features', []))} core features"
     )
 
-    # Parallel: real-world project examples + estimation benchmark docs
-    example_docs, bench_docs = await asyncio.gather(
-        search(query, category="project_example", top_k=2),
-        search(query, category="estimation", top_k=3),
-    )
-    examples_context = format_context(example_docs)
+    # Local file search (always available) + curated estimation benchmark docs from pgvector
+    similar_examples = find_similar_examples_by_text(raw_input or query, top_k=4)
+    examples_context = format_examples_for_prompt(similar_examples)
+    bench_docs = await search(query, category="estimation", top_k=3)
     benchmarks_context = format_context(bench_docs)
     full_response = ""
 

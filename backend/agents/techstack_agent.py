@@ -10,6 +10,7 @@ import logging
 import anthropic
 from config import settings
 from rag.corpus import search, format_context
+from agents.rules.lookup import find_similar_examples_by_text, format_examples_for_prompt
 from agents.agent_utils import parse_json_response
 
 logger = logging.getLogger(__name__)
@@ -62,18 +63,17 @@ async def run_techstack_agent(state: dict) -> dict:
     requirements = state.get("requirements", {})
     architecture = state.get("architecture", {})
 
+    raw_input = state.get("raw_input", "")
     query = (
         f"Tech stack for {requirements.get('domain', '')} {requirements.get('scale', '')} "
         f"application, target users: {', '.join(requirements.get('target_users', []))}, "
         f"architecture pattern: {architecture.get('pattern', '')}"
     )
 
-    # Parallel: real-world project examples + tech stack reference docs
-    example_docs, stack_docs = await asyncio.gather(
-        search(query, category="project_example", top_k=2),
-        search(query, category="techstack", top_k=3),
-    )
-    examples_context = format_context(example_docs)
+    # Local file search (always available) + curated techstack docs from pgvector
+    similar_examples = find_similar_examples_by_text(raw_input or query, top_k=4)
+    examples_context = format_examples_for_prompt(similar_examples)
+    stack_docs = await search(query, category="techstack", top_k=3)
     stacks_context = format_context(stack_docs)
     full_response = ""
 

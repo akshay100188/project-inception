@@ -110,6 +110,15 @@ def find_similar_examples_by_text(query: str, top_k: int = 5) -> list[dict]:
     return scored[:top_k]
 
 
+def format_examples_for_prompt(examples: list[dict]) -> str:
+    """Format matched project examples into a prompt-ready context string."""
+    if not examples:
+        return ""
+    return "\n\n---\n\n".join(
+        f"### {ex['title']}\n{ex['content']}" for ex in examples
+    )
+
+
 def extract_reference_projects(examples: list[dict]) -> list[dict]:
     """
     Pull structured signal out of matched project examples for use in agent outputs.
