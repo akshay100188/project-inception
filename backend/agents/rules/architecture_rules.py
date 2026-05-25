@@ -4,8 +4,8 @@ Derives architecture from domain + scale by matching against the 81 project exam
 """
 import asyncio
 from agents.rules.lookup import (
-    normalize_domain, find_similar_examples,
-    most_common_pattern, get_components,
+    normalize_domain, find_similar_examples_by_text,
+    most_common_pattern, get_components, extract_reference_projects,
 )
 
 _PATTERN_DESC = {
@@ -67,18 +67,24 @@ async def run_architecture_agent(state: dict) -> dict:
     await queue.put({"event": "agent_start", "agent": "architecture", "data": "Designing system architecture..."})
 
     requirements = state.get("requirements", {})
+    raw_input = state.get("raw_input", "")
     domain = requirements.get("domain", "saas")
     scale = requirements.get("scale", "medium")
     features = requirements.get("core_features", [])
 
     norm = normalize_domain(domain)
-    similar = find_similar_examples(norm)
+
+    # Semantic text-similarity search over 81 project examples
+    query = f"{raw_input} {requirements.get('raw_summary', '')}".strip() or domain
+    similar = find_similar_examples_by_text(query, top_k=5)
     pattern = most_common_pattern(similar, scale)
 
     # Upgrade to microservices for genuinely large fintech/ecommerce projects
     must_have = [f for f in features if isinstance(f, dict) and f.get("priority") == "must-have"]
     if scale == "large" and norm in ("fintech", "ecommerce") and len(must_have) >= 8:
         pattern = "microservices"
+
+    refs = extract_reference_projects(similar)
 
     architecture = {
         "pattern": pattern,
@@ -87,6 +93,7 @@ async def run_architecture_agent(state: dict) -> dict:
         "data_flow": _DATA_FLOW.get(pattern, _DATA_FLOW["monolith"]),
         "key_decisions": _KEY_DECISIONS.get(pattern, _KEY_DECISIONS["monolith"]),
         "future_evolution": _FUTURE_EVOLUTION.get(pattern, _FUTURE_EVOLUTION["monolith"]),
+        "reference_projects": refs,
     }
 
     await queue.put({"event": "agent_done", "agent": "architecture", "data": "Architecture designed."})

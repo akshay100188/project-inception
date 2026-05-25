@@ -5,6 +5,7 @@ No API calls — pure deterministic logic.
 """
 import json
 import logging
+import re
 from collections import Counter
 from pathlib import Path
 
@@ -52,14 +53,81 @@ def normalize_domain(domain: str) -> str:
     return "saas"
 
 
+_STOP_WORDS = {
+    "the", "and", "for", "with", "this", "that", "are", "not", "its", "from",
+    "was", "has", "via", "can", "use", "our", "all", "any", "new", "one", "two",
+    "may", "but", "into", "also", "very", "will", "have", "been", "each", "when",
+    "they", "their", "which", "more", "some", "than", "then", "both", "after",
+    "other", "same", "such", "only", "most", "these", "those", "what", "where",
+    "your", "used", "you", "app", "build", "make", "want", "need", "would",
+    "could", "should", "like", "just", "get", "got", "let", "set", "way",
+}
+
+
+def _tokens(text: str) -> set[str]:
+    return {
+        w for w in re.findall(r"[a-z0-9]+", text.lower())
+        if len(w) >= 3 and w not in _STOP_WORDS
+    }
+
+
 def find_similar_examples(norm_domain: str, top_k: int = 5) -> list[dict]:
-    """Return up to top_k examples whose domain normalizes to norm_domain."""
+    """Return up to top_k examples whose domain normalizes to norm_domain (keyword fallback)."""
     examples = load_examples()
     matches = [
         ex for ex in examples
         if normalize_domain(ex["metadata"].get("domain", "")) == norm_domain
     ]
     return matches[:top_k] if matches else examples[:top_k]
+
+
+def find_similar_examples_by_text(query: str, top_k: int = 5) -> list[dict]:
+    """
+    Find the top_k most relevant project examples by word-overlap similarity.
+
+    Scores each example by the intersection of query tokens with the example's
+    content field (title + content + design lessons). Falls back to domain
+    keyword filter if the query yields no signal.
+    """
+    examples = load_examples()
+    q_tokens = _tokens(query)
+    if not q_tokens:
+        return examples[:top_k]
+
+    def _score(ex: dict) -> int:
+        text = ex.get("content", "") + " " + ex.get("title", "")
+        lessons = ex.get("metadata", {}).get("raw_profile", {}).get("lessons", [])
+        text += " " + " ".join(lessons)
+        return len(q_tokens & _tokens(text))
+
+    scored = sorted(examples, key=_score, reverse=True)
+
+    # If top result has zero overlap, fall back to domain filter
+    if _score(scored[0]) == 0:
+        norm = normalize_domain(query)
+        return find_similar_examples(norm, top_k)
+
+    return scored[:top_k]
+
+
+def extract_reference_projects(examples: list[dict]) -> list[dict]:
+    """
+    Pull structured signal out of matched project examples for use in agent outputs.
+    Returns a compact list of reference project dicts.
+    """
+    refs = []
+    for ex in examples:
+        meta = ex.get("metadata", {})
+        profile = meta.get("raw_profile", {})
+        refs.append({
+            "name": profile.get("project_name") or ex["title"].split("—")[0].strip(),
+            "domain": meta.get("domain", ""),
+            "architecture_pattern": meta.get("architecture_pattern", "monolith"),
+            "stars": meta.get("stars", 0),
+            "tech_stack": meta.get("tech_stack", {}),
+            "design_lessons": profile.get("lessons", [])[:2],
+        })
+    return refs
 
 
 def most_common_pattern(examples: list[dict], scale: str) -> str:
