@@ -167,7 +167,10 @@ async def generate_project_prototype(project_id: str, authorization: str = Heade
     Generate a single-file interactive HTML prototype using Claude and persist it on the project.
     Returns the HTML directly so the caller can open it in a new tab.
     """
-    from agents.prototype_agent import generate_prototype
+    if settings.demo_mode:
+        from agents.prototype_agent import generate_prototype
+    else:
+        from report.template_prototype import generate_prototype
 
     user_id = _get_user(authorization)
 

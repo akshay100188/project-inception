@@ -15,14 +15,15 @@ from langgraph.graph import StateGraph, END
 from supabase import create_client
 from config import settings
 from graph.state import PlanningState, PlanningStage
-from agents.requirement_agent import run_requirement_agent
-from agents.clarification_agent import run_clarification_agent
-
 if settings.demo_mode:
+    from agents.requirement_agent import run_requirement_agent
+    from agents.clarification_agent import run_clarification_agent
     from agents.architecture_agent import run_architecture_agent
     from agents.techstack_agent import run_techstack_agent
     from agents.estimation_agent import run_estimation_agent
 else:
+    from agents.rules.requirement_rules import run_requirement_agent
+    from agents.rules.clarification_rules import run_clarification_agent
     from agents.rules.architecture_rules import run_architecture_agent
     from agents.rules.techstack_rules import run_techstack_agent
     from agents.rules.estimation_rules import run_estimation_agent
