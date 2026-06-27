@@ -32,3 +32,5 @@ frontend/node_modules/
 # Personal documents (not for public repo)
 TECHNICAL_OVERVIEW.html
 .claude/
+.vercel
+.env*

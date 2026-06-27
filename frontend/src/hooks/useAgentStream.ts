@@ -1,5 +1,4 @@
 import { useState, useCallback } from "react";
-import { getAuthHeader } from "../lib/supabase";
 import { track } from "../lib/analytics";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
@@ -43,14 +42,10 @@ export function useAgentStream() {
     setPlanData(null);
 
     try {
-      const authHeader = await getAuthHeader();
       const params = new URLSearchParams({ raw_input: rawInput });
       const url = `${API_BASE}/api/stream/run/${projectId}?${params}`;
 
-      const response = await fetch(url, {
-        method: "POST",
-        headers: { Authorization: authHeader },
-      });
+      const response = await fetch(url, { method: "POST" });
 
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
 

@@ -8,8 +8,10 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    supabase_url: str
-    supabase_service_key: str
+    # Supabase is only used by the optional DEMO_MODE RAG corpus. The default
+    # ephemeral flow (no accounts, no saved projects) needs no database at all.
+    supabase_url: str = ""
+    supabase_service_key: str = ""
     cors_origins: str = "http://localhost:5173"
     demo_mode: bool = False  # True → Claude API agents; False → rule-based (no credits used)
 

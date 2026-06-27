@@ -10,7 +10,12 @@ from supabase import create_client, Client
 from config import settings
 
 _openai = AsyncOpenAI(api_key=settings.openai_api_key)
-_supabase: Client = create_client(settings.supabase_url, settings.supabase_service_key)
+# Only built when a Supabase URL is configured (DEMO_MODE RAG). The default
+# ephemeral flow never touches it, so the backend can run without any database.
+_supabase: Client | None = (
+    create_client(settings.supabase_url, settings.supabase_service_key)
+    if settings.supabase_url else None
+)
 
 
 async def embed(text: str) -> list[float]:

@@ -9,8 +9,7 @@ checkpoint via ``POST /api/projects/{id}/checkpoint`` to resume.
 import asyncio
 import json
 import logging
-from typing import Optional
-from fastapi import APIRouter, HTTPException, Header
+from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
 logger = logging.getLogger(__name__)
@@ -67,21 +66,18 @@ def _format_sse(data: dict) -> str:
 async def stream_run(
     project_id: str,
     raw_input: str,
-    authorization: str = Header(...),
 ):
     """
-    Start a planning run for a project. Returns an SSE stream.
-    The client connects here and receives token-by-token agent output.
-    """
-    user_id = _extract_user_id(authorization)
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Invalid token")
+    Start a planning run. Returns an SSE stream of token-by-token agent output.
 
+    No authentication: ``project_id`` is an ephemeral id the browser generated for
+    this run, used only to key human-in-the-loop checkpoints. Nothing is persisted.
+    """
     queue: asyncio.Queue = asyncio.Queue()
 
     initial_state = {
         "project_id": project_id,
-        "user_id": user_id,
+        "user_id": "anonymous",
         "raw_input": raw_input,
         "stage": PlanningStage.requirement,
         "requirements": None,
@@ -99,22 +95,3 @@ async def stream_run(
             "X-Accel-Buffering": "no",    # disables Nginx buffering
         },
     )
-
-
-def _extract_user_id(authorization: str) -> Optional[str]:
-    """
-    Extract the ``sub`` (user UUID) from a Supabase JWT.
-
-    Signature verification is omitted; Supabase RLS enforces ownership at the
-    database layer. See ``api/projects.py::_get_user`` for the full rationale.
-
-    Returns:
-        The user UUID string, or ``None`` if the token cannot be decoded.
-    """
-    try:
-        import jwt
-        token = authorization.replace("Bearer ", "")
-        decoded = jwt.decode(token, options={"verify_signature": False})
-        return decoded.get("sub")
-    except Exception:
-        return None

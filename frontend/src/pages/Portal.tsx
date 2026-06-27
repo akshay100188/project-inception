@@ -1,9 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
-import { getAuthHeader } from "../lib/supabase";
 import { useAgentStream } from "../hooks/useAgentStream";
 import { track } from "../lib/analytics";
 import { CheckpointModal } from "../components/Checkpoint/CheckpointModal";
+import { PlanOutput } from "../components/PlanOutput/PlanOutput";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
@@ -28,8 +27,7 @@ const GENERATION_STAGES = [
   "Estimating timeline & budget…",
 ];
 
-export default function NewProject() {
-  const navigate = useNavigate();
+export default function Portal() {
   const [rawInput, setRawInput] = useState("");
   const [projectId, setProjectId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -37,12 +35,13 @@ export default function NewProject() {
   const [uploadedFilename, setUploadedFilename] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [stageIdx, setStageIdx] = useState(0);
-  const [saving, setSaving] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [generatingReport, setGeneratingReport] = useState(false);
+  const [generatingPrototype, setGeneratingPrototype] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const { checkpoint, planData, isDone, error, startStream, clearCheckpoint } =
+  const { checkpoint, planData, isDone, error, startStream, clearCheckpoint, reset } =
     useAgentStream();
 
   const displayError = error ?? submitError;
@@ -55,37 +54,30 @@ export default function NewProject() {
     return () => clearInterval(timer);
   }, [isGenerating]);
 
-  // Navigate only on clean completion — stay on page if there was an error
+  // When the plan arrives, release the graph's final checkpoint so the run ends
+  // cleanly. Nothing is saved — the plan already lives in `planData`.
   useEffect(() => {
-    if (isDone && projectId && !displayError) {
-      navigate(`/projects/${projectId}`);
+    if (planData && projectId) {
+      void postCheckpoint("checkpoint_2", "approve");
     }
-  }, [isDone, projectId, navigate, displayError]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planData, projectId]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!rawInput.trim()) return;
 
     setSubmitted(true);
+    setSubmitError(null);
     track("project_started", {
       input_length: rawInput.trim().length,
       has_upload: !!uploadedFilename,
     });
 
     try {
-      const authHeader = await getAuthHeader();
-      const res = await fetch(`${API_BASE}/api/projects/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: authHeader },
-        body: JSON.stringify({ raw_input: rawInput }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.detail ?? `Server error ${res.status}`);
-      }
-      const project = await res.json();
-      setProjectId(project.id);
-      await startStream(project.id, rawInput);
+      const id = crypto.randomUUID();
+      setProjectId(id);
+      await startStream(id, rawInput);
     } catch (err: any) {
       setSubmitError(err.message ?? "Something went wrong. Please try again.");
     }
@@ -93,10 +85,9 @@ export default function NewProject() {
 
   async function postCheckpoint(checkpointName: string, action: string, edited?: object) {
     if (!projectId) return;
-    const authHeader = await getAuthHeader();
     await fetch(`${API_BASE}/api/projects/${projectId}/checkpoint`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: authHeader },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action, checkpoint_name: checkpointName, edited_content: edited }),
     });
   }
@@ -105,24 +96,61 @@ export default function NewProject() {
     clearCheckpoint();
     track(`checkpoint_1_${action}`, { was_edited: !!edited });
     await postCheckpoint("checkpoint_1", action, edited);
-    if (action === "reject") navigate("/");
+    if (action === "reject") startOver();
   }
 
-  async function handleApprovePlan() {
-    setSaving(true);
-    track("plan_saved");
+  function startOver() {
+    reset();
+    setRawInput("");
+    setProjectId(null);
+    setSubmitted(false);
+    setSubmitError(null);
+    setUploadedFilename(null);
+    setUploadError(null);
+  }
+
+  async function downloadHtml(
+    endpoint: "report" | "prototype",
+    filename: string,
+    errorLabel: string,
+    setLoad: (v: boolean) => void,
+  ) {
+    if (!planData) return;
+    setLoad(true);
     try {
-      await postCheckpoint("checkpoint_2", "approve");
+      const res = await fetch(`${API_BASE}/api/projects/${endpoint}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          requirements: planData.requirements,
+          architecture: planData.architecture,
+          tech_stack: planData.tech_stack,
+          estimation: planData.estimation,
+        }),
+      });
+      if (!res.ok) throw new Error(`${errorLabel} failed (${res.status})`);
+      const html = await res.text();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+      a.download = filename;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 60_000);
+    } catch (err: any) {
+      alert(`${errorLabel}: ${err.message}`);
     } finally {
-      setSaving(false);
+      setLoad(false);
     }
   }
 
-  async function handleRejectPlan() {
-    track("plan_rejected");
-    await postCheckpoint("checkpoint_2", "reject");
-    navigate("/");
-  }
+  const handleGenerateReport = () => {
+    track("report_downloaded");
+    downloadHtml("report", "project-plan-report.html", "Report generation", setGeneratingReport);
+  };
+
+  const handleGeneratePrototype = () => {
+    track("prototype_downloaded");
+    downloadHtml("prototype", "app-prototype.html", "Prototype generation", setGeneratingPrototype);
+  };
 
   const parseFile = useCallback(async (file: File) => {
     if (!ACCEPTED_MIME.has(file.type) && !file.name.match(/\.(pdf|txt|docx)$/i)) {
@@ -169,15 +197,33 @@ export default function NewProject() {
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
-      <div className="max-w-3xl mx-auto px-4 py-12 space-y-8">
+      <header className="border-b border-gray-800">
+        <div className="max-w-3xl mx-auto px-4 h-14 flex items-center gap-2">
+          <span className="text-blue-400 font-mono text-lg">⬡</span>
+          <span className="font-semibold">Inception</span>
+          <span className="ml-2 text-xs text-gray-600 hidden sm:inline">
+            From idea to implementation plan — nothing is saved
+          </span>
+          {submitted && (
+            <button
+              onClick={startOver}
+              className="ml-auto text-xs text-gray-500 hover:text-gray-300 transition-colors"
+            >
+              Start over
+            </button>
+          )}
+        </div>
+      </header>
 
+      <div className="max-w-3xl mx-auto px-4 py-12 space-y-8">
         {/* Form */}
         {showForm && (
           <>
             <div className="space-y-1">
               <h1 className="text-3xl font-bold tracking-tight">What are you building?</h1>
               <p className="text-gray-400">
-                Describe your idea — agents will extract requirements, design architecture, and estimate costs.
+                Describe your idea — agents extract requirements, design architecture, and estimate
+                cost. Generate and download a report &amp; prototype. No account, no history.
               </p>
             </div>
 
@@ -230,7 +276,7 @@ export default function NewProject() {
                       <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                     </svg>
                     <span className="text-sm">Upload requirements doc — PDF, TXT, or Word</span>
-                    <span className="ml-auto text-xs text-gray-600">or drag & drop</span>
+                    <span className="ml-auto text-xs text-gray-600">or drag &amp; drop</span>
                   </>
                 )}
               </div>
@@ -300,40 +346,104 @@ export default function NewProject() {
 
         {/* Error */}
         {displayError && (
-          <div className="rounded-xl border border-red-800 bg-red-950/50 px-4 py-3 text-sm text-red-300">
-            {displayError}
+          <div className="space-y-4">
+            <div className="rounded-xl border border-red-800 bg-red-950/50 px-4 py-3 text-sm text-red-300">
+              {displayError}
+            </div>
+            <button
+              onClick={startOver}
+              className="text-sm text-gray-400 hover:text-gray-200 transition-colors"
+            >
+              ← Try again
+            </button>
           </div>
         )}
 
-        {/* Plan review — checkpoint_2: show only the save action, nothing else */}
+        {/* Plan ready — show it and offer downloads. Nothing is saved. */}
         {planData && (
-          <div className="rounded-2xl border border-amber-900/40 bg-amber-950/20 px-8 py-7 flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-3 flex-1 min-w-0">
-              <div className="h-2.5 w-2.5 rounded-full bg-amber-400 animate-pulse flex-shrink-0" />
-              <p className="text-base font-semibold text-white">Your plan is ready to save</p>
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="h-2 w-2 rounded-full bg-emerald-400" />
+              <p className="text-sm text-emerald-400 font-medium">
+                Your plan is ready — download your deliverables below
+              </p>
             </div>
+
+            <PlanOutput
+              requirements={planData.requirements as any}
+              architecture={planData.architecture as any}
+              tech_stack={planData.tech_stack as any}
+              estimation={planData.estimation as any}
+              onSave={undefined}
+              reviewMode={false}
+            />
+
+            <div className="rounded-xl border border-gray-800 bg-gray-900/60 px-5 py-5 space-y-4">
+              <div>
+                <p className="text-sm font-semibold text-white">Generate deliverables</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Downloaded straight to your device — not stored anywhere
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button
+                  onClick={handleGenerateReport}
+                  disabled={generatingReport || generatingPrototype}
+                  className="flex flex-col items-start gap-2 p-4 rounded-xl border border-indigo-800/50 bg-indigo-950/40 hover:bg-indigo-950/60 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-left"
+                >
+                  <div className="flex items-center gap-2">
+                    {generatingReport ? (
+                      <svg className="animate-spin h-5 w-5 text-indigo-400" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                      </svg>
+                    ) : (
+                      <svg className="h-5 w-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                    )}
+                    <span className="text-sm font-semibold text-white">
+                      {generatingReport ? "Generating report…" : "Download Planning Report"}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-500 leading-relaxed">
+                    19-section HTML report — architecture, timelines, budget &amp; risk analysis. Open in browser to print as PDF.
+                  </p>
+                </button>
+
+                <button
+                  onClick={handleGeneratePrototype}
+                  disabled={generatingPrototype || generatingReport}
+                  className="flex flex-col items-start gap-2 p-4 rounded-xl border border-purple-800/50 bg-purple-950/40 hover:bg-purple-950/60 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-left"
+                >
+                  <div className="flex items-center gap-2">
+                    {generatingPrototype ? (
+                      <svg className="animate-spin h-5 w-5 text-purple-400" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                      </svg>
+                    ) : (
+                      <svg className="h-5 w-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                      </svg>
+                    )}
+                    <span className="text-sm font-semibold text-white">
+                      {generatingPrototype ? "Generating prototype…" : "Download App Prototype"}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-500 leading-relaxed">
+                    5-screen wireframe document — all key app views with realistic sample data.
+                  </p>
+                </button>
+              </div>
+            </div>
+
             <button
-              onClick={handleRejectPlan}
-              className="text-sm text-gray-500 border border-gray-700 px-4 py-2 rounded-lg hover:bg-gray-800/40 transition-colors"
+              onClick={startOver}
+              className="text-sm text-gray-400 hover:text-gray-200 transition-colors"
             >
-              Discard
-            </button>
-            <button
-              onClick={handleApprovePlan}
-              disabled={saving}
-              className="flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              {saving ? (
-                <>
-                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-                  </svg>
-                  Saving…
-                </>
-              ) : (
-                "Save Plan & Continue →"
-              )}
+              + Plan another idea
             </button>
           </div>
         )}

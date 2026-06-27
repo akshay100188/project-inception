@@ -41,6 +41,18 @@ class CheckpointRequest(BaseModel):
     edited_content: Optional[dict] = None
 
 
+class GenerateRequest(BaseModel):
+    """Plan data sent straight from the browser to generate a downloadable artifact.
+
+    Nothing is read from or written to a database — the client holds the plan in
+    memory and posts it here purely to render the HTML deliverable.
+    """
+    requirements: Optional[dict] = None
+    architecture: Optional[dict] = None
+    tech_stack: Optional[dict] = None
+    estimation: Optional[dict] = None
+
+
 class Project(BaseModel):
     id: UUID
     user_id: str

@@ -12,7 +12,6 @@ implementing true human-in-the-loop pauses without polling.
 import asyncio
 import logging
 from langgraph.graph import StateGraph, END
-from supabase import create_client
 from config import settings
 from graph.state import PlanningState, PlanningStage
 if settings.demo_mode:
@@ -30,8 +29,6 @@ else:
 import checkpoint_registry as cr
 
 logger = logging.getLogger(__name__)
-
-_supabase = create_client(settings.supabase_url, settings.supabase_service_key)
 
 
 def route_after_checkpoint_1(state: PlanningState) -> str:
@@ -122,31 +119,15 @@ async def _checkpoint_1_node(state: PlanningState) -> dict:
 
 async def _checkpoint_2_node(state: PlanningState) -> dict:
     """
-    Pause the graph for final plan review and persist the approved plan to Supabase.
+    Pause the graph for final plan review, then end the run.
 
-    On approval, writes the full plan JSON (architecture + tech_stack + estimation)
-    to the ``incept_projects`` table and sets status to ``complete``.
+    The full plan (architecture + tech_stack + estimation + requirements) is emitted
+    in the ``checkpoint_2`` SSE event, so the browser already holds everything it
+    needs to render and download deliverables. Nothing is persisted.
     """
     queue: asyncio.Queue = state["stream_queue"]
     project_id = state["project_id"]
     key = cr.checkpoint_key(project_id, "checkpoint_2")
-
-    plan = {
-        "architecture": state.get("architecture"),
-        "tech_stack": state.get("tech_stack"),
-        "estimation": state.get("estimation"),
-    }
-
-    # Persist plan immediately so the review UI survives SSE disconnects.
-    # requirements is saved here so the report/prototype endpoints can use it.
-    try:
-        _supabase.table("incept_projects").update({
-            "plan": plan,
-            "requirements": state.get("requirements"),
-            "status": "reviewing",
-        }).eq("id", project_id).execute()
-    except Exception as exc:
-        logger.error("Failed to pre-save plan for project %s: %s", project_id, exc)
 
     cr.register(key)
     await queue.put({
@@ -161,15 +142,7 @@ async def _checkpoint_2_node(state: PlanningState) -> dict:
         },
     })
 
-    decision = await cr.wait_for_decision(key)
+    await cr.wait_for_decision(key)
     cr.cleanup(key)
-
-    final_status = "complete" if decision.get("action") != "reject" else "drafting"
-    try:
-        _supabase.table("incept_projects").update({
-            "status": final_status,
-        }).eq("id", project_id).execute()
-    except Exception as exc:
-        logger.error("Failed to update final status for project %s: %s", project_id, exc)
 
     return {"stage": PlanningStage.checkpoint_2, "checkpoint_2_approved": True}

@@ -12,8 +12,10 @@ from api import stream, projects, admin, upload
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    assert settings.supabase_url.startswith("https://"), "SUPABASE_URL must be a REST URL"
     if settings.demo_mode:
+        assert settings.supabase_url.startswith("https://"), (
+            "DEMO_MODE=true uses the Supabase pgvector RAG corpus — SUPABASE_URL must be set."
+        )
         assert settings.anthropic_api_key, (
             "DEMO_MODE=true requires ANTHROPIC_API_KEY to be set. "
             "Set DEMO_MODE=false to run without API keys."

@@ -8,7 +8,11 @@ from supabase import create_client
 from config import settings
 
 _openai = AsyncOpenAI(api_key=settings.openai_api_key)
-_supabase = create_client(settings.supabase_url, settings.supabase_service_key)
+# Only built when a Supabase URL is configured (DEMO_MODE RAG seeding).
+_supabase = (
+    create_client(settings.supabase_url, settings.supabase_service_key)
+    if settings.supabase_url else None
+)
 
 CORPUS: list[dict] = [
     # ── Architecture ────────────────────────────────────────────────────────
