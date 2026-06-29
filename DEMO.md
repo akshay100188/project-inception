@@ -1,103 +1,79 @@
 # Loom Demo Script — Project Inception
 
-**Suggested recording time:** 3–4 minutes  
+**Suggested recording time:** 3–4 minutes
 **Input to use:** "A SaaS tool that turns Loom recordings into Notion docs automatically using AI"
 
-> **Before recording:** Set `DEMO_MODE=true` in `backend/.env` and confirm both `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` are present. This script shows the full Claude-powered experience. The default public deployment runs in rule-based mode (`DEMO_MODE=false`) with zero API credits consumed.
+> **Before recording:** Set `DEMO_MODE=true` in `backend/.env` and confirm `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, and the Supabase RAG vars are present. This script shows the full Claude-powered experience. The default public deployment runs in rule-based mode (`DEMO_MODE=false`) with zero API credits and no database.
 
 ---
 
 ## 0 · Setup (before recording)
 
 - Confirm `DEMO_MODE=true` in your backend `.env` and the server has restarted
-- Open the app at your production URL (or `localhost:5173`)
-- Open a second browser tab with the Dashboard so you can end on it
+- Open the app at your production URL (or `localhost:5173`) — you land straight on the portal, no login
 - Have the input text copied to clipboard
 - Make sure screen resolution is clean — 1440×900 or similar
 
 ---
 
-## 1 · Login (0:00 – 0:20)
+## 1 · The portal (0:00 – 0:20)
 
-1. Show the login screen briefly — "magic link auth via Supabase"
-2. Already logged in? Go straight to Dashboard
-
----
-
-## 2 · Dashboard (0:20 – 0:35)
-
-1. Show the Dashboard — may be empty or have previous projects
-2. Click **+ New Project**
-3. "Let's give it a real idea"
+1. Show the landing page — *"No sign-up, no account. You land right on the portal."*
+2. Narrate: *"Everything here is ephemeral — nothing about your idea is stored. You run it, download your plan, and closing the tab wipes it."*
+3. Mention you could also drag in a PDF / Word / text requirements doc instead of typing.
 
 ---
 
-## 3 · Submit an idea (0:35 – 0:55)
+## 2 · Submit an idea (0:20 – 0:45)
 
 1. Paste: **"A SaaS tool that turns Loom recordings into Notion docs automatically using AI"**
 2. Click **Start Planning →**
-3. Narrate: *"The agent pipeline kicks off — first the requirement analyst extracts structured requirements from the raw idea"*
+3. Narrate: *"The agent pipeline kicks off — first the requirement analyst extracts structured requirements from the raw idea."*
 
 ---
 
-## 4 · Phase 1 streaming — Requirement + Clarification (0:55 – 1:40)
+## 3 · Phase 1 streaming — Requirement + Clarification (0:45 – 1:30)
 
-1. Watch the **Requirement Analyst** token stream live
-2. Watch the **Clarification Agent** fire next — targeted questions appear
-3. Narrate: *"Two Claude agents in sequence — each one receives the top 3 most similar real-world projects as grounding context before it calls Claude, so the output is calibrated against actual precedents, not just training data"*
-4. Graph pauses — **Checkpoint 1 modal** appears
-
----
-
-## 5 · Checkpoint 1 — Requirements review (1:40 – 2:00)
-
-1. Show the modal: project name, feature cards, clarifying questions, target users
-2. Narrate: *"Human-in-the-loop — the LangGraph state machine is paused on the server, waiting for my decision via an asyncio.Event"*
-3. Click **Approve & Continue →**
-4. Modal closes, Phase 2 agents begin immediately
+1. Watch the **Requirement Analyst** stream live, then the **Clarification Agent** fire next.
+2. Narrate: *"Two Claude agents in sequence — each receives the top 3 most similar real-world projects as grounding context before it calls Claude, so the output is calibrated against actual precedents, not just training data."*
+3. The graph pauses — the **requirements checkpoint** appears.
 
 ---
 
-## 6 · Phase 2 streaming — Architecture + Tech Stack + Estimation (2:00 – 2:45)
+## 4 · Checkpoint — Requirements review (1:30 – 1:55)
 
-1. Watch **Architecture Architect** stream (pattern, components, rationale)
-2. Watch **Tech Stack Selector** stream
-3. Watch **Estimation Analyst** stream
-4. Narrate: *"Three Claude agents in sequence — each one receives the top 4 most similar real-world projects as grounding context alongside curated reference documents, so recommendations are backed by actual precedents rather than pure model intuition"*
-5. Graph pauses — plan review appears
+1. Show the modal: project name, feature cards, clarifying questions, target users.
+2. Narrate: *"The one human-in-the-loop step — the LangGraph state machine is paused on the server on an in-memory asyncio.Event, waiting for my decision. I can approve, edit, or reject."*
+3. Click **Approve & Continue →** — the modal closes and Phase 2 begins immediately.
 
 ---
 
-## 7 · Checkpoint 2 — Plan review (2:45 – 3:15)
+## 5 · Phase 2 streaming — Architecture + Tech Stack + Estimation (1:55 – 2:45)
 
-1. Scroll through the plan: architecture cards, tech stack layers, timeline phases, cost range
-2. Narrate: *"Full plan — architecture pattern, recommended stack, phase-by-phase timeline, cost breakdown"*
-3. Click **Approve & Save →**
-4. Navigates to Project Detail page
+1. Watch **Architecture Architect**, **Tech Stack Selector**, and **Estimation Analyst** stream in sequence.
+2. Narrate: *"Three Claude agents — each grounded with the top 4 most similar real-world projects alongside curated reference docs, so the recommendations are backed by precedent rather than pure model intuition."*
 
 ---
 
-## 8 · Project Detail + Export (3:15 – 3:45)
+## 6 · The plan appears (2:45 – 3:15)
 
-1. Show the saved plan on the detail page
-2. Click **Download Report** — browser opens the 19-section HTML planning document
-3. Narrate: *"One-click export — a complete planning report ready to share with stakeholders or print to PDF"*
-4. Click **Download Wireframe** — browser opens the 5-screen interactive prototype
-5. Narrate: *"A domain-aware UI wireframe — five screens, realistic sample data, no design tool needed"*
+1. The finished plan renders right in the page — architecture cards, tech stack layers, timeline phases, cost range.
+2. Narrate: *"The full plan — architecture pattern, recommended stack, phase-by-phase timeline, cost breakdown — all in the browser. Nothing was saved to do this."*
 
 ---
 
-## 9 · Dashboard (3:45 – 3:55)
+## 7 · Download deliverables (3:15 – 3:50)
 
-1. Navigate back to Dashboard
-2. Show the saved project card: name, domain tag, architecture pattern, MVP weeks, **Complete** badge
-3. Narrate: *"Every plan saved to Supabase with full history"*
+1. Click **Download Planning Report** — the 19-section HTML planning document downloads to your device.
+2. Narrate: *"One click — a complete planning report, ready to share or print to PDF."*
+3. Click **Download App Prototype** — the 5-screen interactive wireframe downloads.
+4. Narrate: *"A domain-aware UI wireframe — five screens, realistic sample data, no design tool needed. Both files are yours; the app keeps nothing."*
 
 ---
 
-## 10 · Closing (3:55 – 4:00)
+## 8 · Closing (3:50 – 4:00)
 
-> *"Project Inception — from rough idea to a reviewed, exportable project plan in under 4 minutes."*
+> *"Project Inception — from a rough idea to a downloadable, reviewed project plan in under 4 minutes. No account, no database, no trace left behind."*
 
 ---
 
@@ -105,14 +81,15 @@
 
 | What to say | What to show |
 |---|---|
+| "No login, no account — you land right on the portal" | The landing page |
+| "Fully ephemeral — nothing is stored, closing the tab wipes it" | Mention at the start |
 | "Seven agents, two modes — Claude-powered or fully rule-based" | Mention at the start |
-| "Both modes use the same 81 real-world project examples as grounding" | Can mention during Phase 1 or 2 |
-| "Agents run in a LangGraph state machine" | AgentPanel with live tokens |
-| "True human-in-the-loop — server is paused on an asyncio.Event" | Checkpoint modal |
+| "Both modes use the same 81 real-world project examples as grounding" | During Phase 1 or 2 |
+| "Agents run in a LangGraph state machine" | Live token streaming |
+| "True human-in-the-loop — server paused on an in-memory asyncio.Event" | Requirements checkpoint |
 | "Full plan delivered over a single SSE stream" | Continuous streaming UI |
-| "19-section HTML report + 5-screen wireframe on download" | Both export buttons |
-| "Magic link auth, Supabase RLS enforces per-user isolation" | Dashboard with user badge |
-| "Default mode uses zero Anthropic credits — safe for public access" | Can mention at close |
+| "19-section HTML report + 5-screen wireframe, downloaded to your device" | Both download buttons |
+| "Default mode uses zero Anthropic credits and no database — safe for public access" | At the close |
 
 ---
 
@@ -121,7 +98,7 @@
 ```bash
 # In backend/.env
 DEMO_MODE=false
-# ANTHROPIC_API_KEY and OPENAI_API_KEY can be left blank or removed
+# ANTHROPIC_API_KEY, OPENAI_API_KEY, and the Supabase vars can be left blank or removed
 ```
 
-Restart the server. All agents revert to rule-based mode — no credits can be consumed.
+Restart the server. All agents revert to rule-based mode — no credits can be consumed and no database is touched.
