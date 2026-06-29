@@ -31,17 +31,7 @@ export function initAnalytics() {
   });
 }
 
-export function identifyUser(userId: string, properties?: Record<string, unknown>) {
-  if (!KEY) return;
-  posthog.identify(userId, properties);
-}
-
 export function track(event: string, properties?: Record<string, unknown>) {
   if (!KEY) return;
   posthog.capture(event, properties);
-}
-
-export function resetUser() {
-  if (!KEY) return;
-  posthog.reset();
 }

@@ -1,38 +1,19 @@
 """
-Pydantic request/response schemas for the Project Inception API.
+Pydantic request schemas for the Project Inception API.
 
-Defines models for project CRUD, checkpoint resolution, and SSE event payloads.
+The app is ephemeral — no accounts, no stored projects. These models cover the
+two things the browser posts: a human-in-the-loop checkpoint decision on the live
+stream, and the plan data used to render a downloadable deliverable.
 """
 from pydantic import BaseModel
 from typing import Optional
-from uuid import UUID
-from datetime import datetime
 from enum import Enum
-
-
-class ProjectStatus(str, Enum):
-    drafting = "drafting"
-    clarifying = "clarifying"
-    planning = "planning"
-    reviewing = "reviewing"
-    complete = "complete"
 
 
 class CheckpointAction(str, Enum):
     approve = "approve"
     edit = "edit"
     reject = "reject"
-
-
-class ProjectCreate(BaseModel):
-    raw_input: str
-
-
-class ProjectUpdate(BaseModel):
-    status: Optional[ProjectStatus] = None
-    requirements: Optional[dict] = None
-    clarifications: Optional[dict] = None
-    plan: Optional[dict] = None
 
 
 class CheckpointRequest(BaseModel):
@@ -51,21 +32,3 @@ class GenerateRequest(BaseModel):
     architecture: Optional[dict] = None
     tech_stack: Optional[dict] = None
     estimation: Optional[dict] = None
-
-
-class Project(BaseModel):
-    id: UUID
-    user_id: str
-    raw_input: str
-    status: ProjectStatus
-    requirements: Optional[dict] = None
-    clarifications: Optional[dict] = None
-    plan: Optional[dict] = None
-    created_at: datetime
-    updated_at: datetime
-
-
-class StreamEvent(BaseModel):
-    event: str        # agent_start | token | agent_done | checkpoint | error | done
-    agent: Optional[str] = None
-    data: Optional[str] = None

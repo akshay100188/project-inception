@@ -1,42 +1,11 @@
--- Run this in your Supabase SQL editor
-
-create table if not exists public.incept_projects (
-  id          uuid primary key default gen_random_uuid(),
-  user_id     uuid not null references auth.users(id) on delete cascade,
-  raw_input   text not null,
-  status      text not null default 'drafting'
-              check (status in ('drafting','clarifying','planning','reviewing','complete')),
-  requirements    jsonb,
-  clarifications  jsonb,
-  plan            jsonb,
-  created_at  timestamptz not null default now(),
-  updated_at  timestamptz not null default now()
-);
-
--- Row-level security: users can only see their own projects
-alter table public.incept_projects enable row level security;
-
-create policy "incept: users can manage own projects"
-  on public.incept_projects
-  for all
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
-
--- Auto-update updated_at
-create or replace function public.handle_updated_at()
-returns trigger language plpgsql as $$
-begin
-  new.updated_at = now();
-  return new;
-end;
-$$;
-
-create trigger incept_projects_updated_at
-  before update on public.incept_projects
-  for each row execute procedure public.handle_updated_at();
-
+-- Run this in your Supabase SQL editor.
+--
+-- Only needed for DEMO_MODE=true, which grounds the Claude agents with a
+-- pgvector corpus. The default (rule-based, ephemeral) app needs no database —
+-- it stores nothing and has no accounts.
+--
 -- ────────────────────────────────────────────────────────────
--- Phase 2: pgvector RAG corpus
+-- pgvector RAG corpus (DEMO_MODE only)
 -- ────────────────────────────────────────────────────────────
 
 create extension if not exists vector;
